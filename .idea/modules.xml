@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/jar/jar.iml" filepath="$PROJECT_DIR$/jar/jar.iml" />
+      <module fileurl="file://$PROJECT_DIR$/jar/java.iml" filepath="$PROJECT_DIR$/jar/java.iml" />
       <module fileurl="file://$PROJECT_DIR$/javap2p.iml" filepath="$PROJECT_DIR$/javap2p.iml" />
     </modules>
   </component>
