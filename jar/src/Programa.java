@@ -1,10 +1,9 @@
 import java.io.IOException;
 import java.net.DatagramSocket;
-import java.net.UnknownHostException;
 
 public class Programa {
 	
-	public static void main(String[] args) throws UnknownHostException, IOException {
+	public static void main(String[] args) throws IOException {
 		Server servidor = new Server();		
 		servidor.criarServerSocket(5555);
 		Runnable tServidor = () -> {
