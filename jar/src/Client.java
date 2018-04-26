@@ -12,7 +12,8 @@ public class Client implements Runnable{
 		String msg = "Opa, sou o cliente.";
 		byte[] buffer = msg.getBytes();
 
-		DatagramPacket packet = new DatagramPacket(buffer, buffer.length, InetAddress.getByName("255.255.255.255"), 5555);
+		DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
+				InetAddress.getByName("255.255.255.255"), 5555);
 		socket.send(packet);
 		socket.close();
 	}
