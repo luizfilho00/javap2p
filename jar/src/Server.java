@@ -38,7 +38,7 @@ public class Server{
                 running = false;
                 continue;
             }
-            System.out.println("Recebido do ip: "+address+ ", mensagem: "+received);
+            System.out.println("Recebido do ip: "+address.getHostAddress()+ ", mensagem: "+received);
             try {
 				socket.send(packet);
 			} catch (IOException e) {
