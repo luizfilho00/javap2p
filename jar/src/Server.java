@@ -1,51 +1,85 @@
-import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.io.*;
+import java.net.*;
+import java.util.List;
+
 public class Server{
 	
-	private DatagramSocket serverSocket;
-	private byte[] buf = new byte[256];
-	private boolean running;
+	private DatagramSocket serverSocketUDP;
+	private ServerSocket serverSocketTCP;
+	private byte[] buf = new byte[4096];
 	
-	public void criarServerSocket(int porta) throws IOException {
-		serverSocket = new DatagramSocket(5555);
+	public void criaConexaoUDP(int porta) throws IOException {
+		serverSocketUDP = new DatagramSocket(porta);
 	}
+
+
+    public void criaConexaoTCP(int porta) throws IOException {
+        serverSocketTCP = new ServerSocket(porta);
+    }
 	
-	public DatagramSocket criaConexao() throws IOException {
-		return this.serverSocket;
-	}
-	
-	public void trataConexao(DatagramSocket socket) throws IOException {
-		running = true;
-		 
-        while (running) {
-        	System.out.println("Esperando conexao...");
+	public void trataConexaoUDP() throws IOException {
+
+        while (true) {
+        	System.out.println("Esperando conexao UDP...");
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
             try {
-				socket.receive(packet);
-				System.out.println("Cliente conectado!");
+				serverSocketUDP.receive(packet);
+				System.out.println("Cliente UDP conectado!");
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-             
+
             InetAddress address = packet.getAddress();
             int port = packet.getPort();
             packet = new DatagramPacket(buf, buf.length, address, port);
             String received = new String(packet.getData(), 0, packet.getLength());
-             
-            if (received.equals("end")) {
-                running = false;
-                continue;
-            }
+            received = received.trim();
             System.out.println("Recebido do ip: "+address.getHostAddress()+ ", mensagem: "+received);
-            try {
-				socket.send(packet);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-            buf = new byte[256];
+
+            if (received.equals("listarUsuarios")) {
+                buf = new byte[4096];
+                listarUsuarios(packet, serverSocketUDP);
+                break;
+            }
+            buf = new byte[4096];
         }
-        socket.close();
 	}
+
+	public void trataConexaoTCP() throws IOException, ClassNotFoundException {
+        System.out.println("Esperando conexao TCP...");
+        Socket cliente = serverSocketTCP.accept();
+        System.out.println("Cliente TCP conectado: " + cliente.getInetAddress().getHostAddress());
+        ObjectInputStream entrada = new ObjectInputStream(cliente.getInputStream());
+        ObjectOutputStream saida = new ObjectOutputStream(cliente.getOutputStream());
+        Mensagem msg = (Mensagem) entrada.readObject();
+
+        if (msg.getOperacao().equals("buscarArquivo")){
+            boolean resultadoBusca = buscarArquivo((String)msg.getParam("nomeArquivo"));
+            saida.writeBoolean(resultadoBusca);
+            saida.close();
+            cliente.close();
+        }else{
+            System.out.println("Que porra recebeu nessa merda?");
+        }
+    }
+
+    public synchronized void listarUsuarios(DatagramPacket packet, DatagramSocket datagramSocket) throws IOException {
+        InetAddress address = InetAddress.getLocalHost();
+        int port = packet.getPort();
+        System.out.println("Ip servidor: " +address.getHostAddress());
+        packet = new DatagramPacket(buf, buf.length, address, port);
+        datagramSocket.send(packet);
+    }
+
+    public boolean buscarArquivo(String arquivo){
+        System.out.println("Chamado metodo para buscar aquivo: " + arquivo);
+        return true;
+    }
+
+    public boolean transferirArquivo(String arquivo){
+	    //TODO transferir arquivo via tcp
+	    return false;
+    }
+
+
 }
