@@ -17,7 +17,7 @@ public class Server{
         serverSocketTCP = new ServerSocket(porta);
     }
 
-    public void trataConexaoUDP() throws IOException {
+    public void trataConexaoUDP() throws IOException, ClassNotFoundException {
 
         while (true) {
             System.out.println("Esperando conexao UDP...");
@@ -32,13 +32,14 @@ public class Server{
             InetAddress address = packet.getAddress();
             int port = packet.getPort();
             packet = new DatagramPacket(buf, buf.length, address, port);
-            String received = new String(packet.getData(), 0, packet.getLength());
-            received = received.trim();
-            System.out.println("Recebido do ip: "+address.getHostAddress()+ ", mensagem: "+received);
+            ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
+            Mensagem msg = (Mensagem) entrada.readObject();
+            entrada.close();
+            System.out.println("Recebido do ip: "+address.getHostAddress()+ ", operacao: "+ msg.getOperacao());
 
-            if (received.equals("listarUsuarios")) {
+            if (msg.getOperacao().equals("listarUsuarios")) {
                 buf = new byte[4096];
-                listarUsuarios(packet, serverSocketUDP);
+                listarUsuarios(packet);
             }
             buf = new byte[4096];
         }
@@ -68,12 +69,12 @@ public class Server{
         }
     }
 
-    public synchronized void listarUsuarios(DatagramPacket packet, DatagramSocket datagramSocket) throws IOException {
+    public synchronized void listarUsuarios(DatagramPacket packet) throws IOException {
         InetAddress address = InetAddress.getLocalHost();
         int port = packet.getPort();
         System.out.println("Ip servidor: " +address.getHostAddress());
         packet = new DatagramPacket(buf, buf.length, address, port);
-        datagramSocket.send(packet);
+        serverSocketUDP.send(packet);
     }
 
     public synchronized String[] listarArquivos(){

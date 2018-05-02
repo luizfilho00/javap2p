@@ -6,38 +6,51 @@ public class Client implements Runnable{
 
     private HashSet<String> ipsConectados = new HashSet<>();
     private HashMap<String, String[]> listaArquivos = new HashMap<String, String[]>();
+    private DatagramSocket datagramSocket = new DatagramSocket();
+
+    public Client() throws SocketException {
+        datagramSocket.setBroadcast(true);
+    }
+
+    private DatagramPacket trataConexao(Mensagem msg) throws IOException {
+        ByteArrayOutputStream bStream = new ByteArrayOutputStream();
+        ObjectOutput saidaObjeto = new ObjectOutputStream(bStream);
+        saidaObjeto.writeObject(msg);
+        saidaObjeto.close();
+
+        byte[] serializedMsg = bStream.toByteArray();
+
+        DatagramPacket packet = new DatagramPacket(serializedMsg, serializedMsg.length,
+                InetAddress.getByName("255.255.255.255"), 5555);
+        datagramSocket.send(packet);
+
+        return packet;
+    }
 
     public void listarUsuarios() throws UnknownHostException, IOException {
-        DatagramSocket socket = new DatagramSocket();
-        socket.setBroadcast(true);
-        String msg = "listarUsuarios";
-        byte[] buffer = msg.getBytes();
-
-        DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
-                InetAddress.getByName("255.255.255.255"), 5555);
-        socket.send(packet);
-
+        // Serialize to a byte array
+        Mensagem msg = new Mensagem("listarUsuarios");
+        DatagramPacket packet = trataConexao(msg);
         //Recebe resposta
-        socket.receive(packet);
+        datagramSocket.receive(packet);
         System.out.println("Recebeu resposta");
         String ip = packet.getAddress().getHostAddress();
         populaIpsConectados(ip);
-        socket.close();
+        datagramSocket.close();
     }
 
     //Cliente espera chegar algo na entrada = InputStream
     public void buscarArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
-        Socket socket = new Socket("localhost", 12002);
+        //Socket socket = new Socket("localhost", 12002);
         Mensagem msg = new Mensagem("buscarArquivo");
         msg.setParam("nomeArquivo", nomeArquivo); //TODO Adaptar para buscar nome independente de extensão
-        ObjectOutputStream saida = new ObjectOutputStream(socket.getOutputStream());
-        saida.writeObject(msg);
-        saida.flush();
-        ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream());
-        boolean encontrouArquivo = entrada.readBoolean();
-        if (encontrouArquivo) System.out.println("Arquivo encontrado!");
-        else System.out.println("Arquivo não encontrado :(");
-        entrada.close();
+        DatagramPacket packet = trataConexao(msg);
+        //Recebe resposta
+        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
+        boolean arquivoEncontrado = (boolean)entrada.readObject();
+        if (arquivoEncontrado){
+            //TODO fazer alguma coisa aqui
+        }
     }
 
     public void listarArquivos() throws IOException, ClassNotFoundException {
@@ -68,27 +81,29 @@ public class Client implements Runnable{
     @Override
     public void run() {
         try {
-            System.out.println("Entre com a opcao desejada:");
-            System.out.println("1 - Listar usuarios conectados na rede");
-            System.out.println("2 - Buscar arquivo pelo nome");
-            System.out.println("3 - Listar todos os arquivos da RCA");
-            BufferedReader leitor = new BufferedReader(new InputStreamReader(System.in));
-            String comando = leitor.readLine();
-            switch(comando){
-                case "1":
-                    listarUsuarios();
-                    break;
-                case "2":
-                    String nomeArquivo = leitor.readLine();
-                    buscarArquivo(nomeArquivo);
-                    break;
-                case "3":
-                    listarArquivos();
-                    break;
-                default:
-                    System.out.println("Deu ruim");
-                    break;
-
+            String comando = "";
+            while(!comando.equals("0")){
+                System.out.println("######### Funcoes #########");
+                System.out.println("1 - Listar usuarios conectados na rede");
+                System.out.println("2 - Buscar arquivo pelo nome");
+                System.out.println("3 - Listar todos os arquivos da RCA");
+                System.out.println("0 - Sair");
+                BufferedReader leitor = new BufferedReader(new InputStreamReader(System.in));
+                comando = leitor.readLine();
+                switch(comando){
+                    case "1":
+                        listarUsuarios();
+                        break;
+                    case "2":
+                        String nomeArquivo = leitor.readLine();
+                        buscarArquivo(nomeArquivo);
+                        break;
+                    case "3":
+                        listarArquivos();
+                        break;
+                    default:
+                        break;
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();

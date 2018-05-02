@@ -11,6 +11,8 @@ public class Programa {
 				servidor.trataConexaoUDP();
 			} catch (IOException e) {
 				e.printStackTrace();
+			} catch (ClassNotFoundException e) {
+				e.printStackTrace();
 			}
 			System.out.println("Conexao UDP finalizada");
 		};
