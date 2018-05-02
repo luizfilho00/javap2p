@@ -4,11 +4,14 @@ import java.util.*;
 
 public class Client implements Runnable{
 
-    private HashSet<String> ipsConectados = new HashSet<>();
-    private HashMap<String, String[]> listaArquivos = new HashMap<String, String[]>();
-    private DatagramSocket datagramSocket = new DatagramSocket();
+    private HashSet<String> ipsConectados;
+    private HashMap<String, String[]> listaArquivos;
+    private DatagramSocket datagramSocket;
 
     public Client() throws SocketException {
+        ipsConectados = new HashSet<>();
+        listaArquivos = new HashMap<>();
+        datagramSocket = new DatagramSocket();
         datagramSocket.setBroadcast(true);
     }
 
@@ -36,7 +39,7 @@ public class Client implements Runnable{
         System.out.println("Recebeu resposta");
         String ip = packet.getAddress().getHostAddress();
         populaIpsConectados(ip);
-        datagramSocket.close();
+        //datagramSocket.close();
     }
 
     //Cliente espera chegar algo na entrada = InputStream
