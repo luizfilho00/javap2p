@@ -1,7 +1,5 @@
 import java.io.*;
 import java.net.*;
-import java.util.HashMap;
-import java.util.List;
 
 public class Server{
 
@@ -111,40 +109,32 @@ public class Server{
     }
 
     private void transfereArquivo(File file, Socket socket) throws IOException {
+        FileInputStream fileInput = new FileInputStream(file);
+        BufferedInputStream buffInputStream = new BufferedInputStream(fileInput);
+        DataOutputStream saida = new DataOutputStream(socket.getOutputStream());
 
-        //The InetAddress specification
-        InetAddress IA = InetAddress.getByName("localhost");
-
-        //Specify the file
-        FileInputStream fis = new FileInputStream(file);
-        BufferedInputStream bis = new BufferedInputStream(fis);
-
-        //Get socket's output stream
-        OutputStream os = socket.getOutputStream();
-
-        //Read File Contents into contents array
-        byte[] contents;
-        long fileLength = file.length();
-        long current = 0;
+        //Le o arquivo no buffer
+        byte[] buffer;
+        long tamanhoDoArquivo = file.length();
+        long tamAux = 0;
 
         long start = System.nanoTime();
-        while(current!=fileLength){
-            int size = 10000;
-            if(fileLength - current >= size)
-                current += size;
+        while(tamAux != tamanhoDoArquivo){
+            int size = 4096;
+            if(tamanhoDoArquivo - tamAux >= size)
+                tamAux += size;
             else{
-                size = (int)(fileLength - current);
-                current = fileLength;
+                size = (int)(tamanhoDoArquivo - tamAux);
+                tamAux = tamanhoDoArquivo;
             }
-            contents = new byte[size];
-            bis.read(contents, 0, size);
-            os.write(contents);
-            System.out.println("Enviando arquivo... "+(current*100)/fileLength+"% completo!");
+            buffer = new byte[size];
+            buffInputStream.read(buffer, 0, size);
+            saida.write(buffer);
+            System.out.println("Enviando arquivo... "+(tamAux*100)/tamanhoDoArquivo+"% completo!");
         }
         long finish = System.nanoTime();
-        os.flush();
+        saida.flush();
 
-        //File transfer done. Close the socket connection!
         socket.close();
         //serverSocketTCP.close();
         System.out.println("Arquivo enviado com sucesso!");
