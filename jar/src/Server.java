@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.util.HashMap;
 import java.util.List;
 
 public class Server{
@@ -41,6 +42,52 @@ public class Server{
                 buf = new byte[4096];
                 listarUsuarios(packet);
             }
+            if (msg.getOperacao().equals("listarArquivos")) {
+                String[] listaArquivos = listarArquivos();
+                //Cria um novo buffer com tamanho do Objeto a ser enviado
+                buf = new byte[listaArquivos.length];
+                //Cria um array de bytes output
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                //Cria um object output para encapsular o objeto a ser enviado na rede
+                ObjectOutput saidaObjeto = new ObjectOutputStream(byteArrayOutputStream);
+                //Escreve o objeto na saidaObjeto
+                saidaObjeto.writeObject(listaArquivos);
+                saidaObjeto.close();
+
+                //Cria um array de bytes com o objeto serializado pelo Array de bytes
+                byte[] objetoSerializado = byteArrayOutputStream.toByteArray();
+
+                //Cria um pacote com o objeto serializado e envia para quem pediu a lista de arquivos
+                packet = new DatagramPacket(objetoSerializado, objetoSerializado.length,
+                        address, port);
+                serverSocketUDP.send(packet);
+            }
+            if (msg.getOperacao().equals("buscarArquivo")) {
+                buf = new byte[4096];
+                String nomeArquivo = (String) msg.getParam("nomeArquivo");
+
+                //Cria msg que encapsula resposta
+                Mensagem resposta = buscarArquivo(nomeArquivo);
+
+                String cliente = InetAddress.getByName("localhost").getHostAddress();
+                resposta.setParam("cliente", cliente);
+
+                //Cria um array de bytes output
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                //Cria um object output para encapsular o objeto a ser enviado na rede
+                ObjectOutput saidaObjeto = new ObjectOutputStream(byteArrayOutputStream);
+                //Escreve o objeto na saidaObjeto
+                saidaObjeto.writeObject(resposta);
+                saidaObjeto.close();
+
+                //Cria um array de bytes com o objeto serializado pelo Array de bytes
+                byte[] objetoSerializado = byteArrayOutputStream.toByteArray();
+
+                //Cria um pacote com o objeto serializado e envia para quem pediu a lista de arquivos
+                packet = new DatagramPacket(objetoSerializado, objetoSerializado.length,
+                        address, port);
+                serverSocketUDP.send(packet);
+            }
             buf = new byte[4096];
         }
     }
@@ -52,27 +99,74 @@ public class Server{
             System.out.println("Cliente TCP conectado: " + cliente.getInetAddress().getHostAddress());
             ObjectInputStream entrada = new ObjectInputStream(cliente.getInputStream());
             ObjectOutputStream saida = new ObjectOutputStream(cliente.getOutputStream());
-            Mensagem msg = (Mensagem) entrada.readObject();
 
-            if (msg.getOperacao().equals("buscarArquivo")){
-                boolean resultadoBusca = buscarArquivo((String)msg.getParam("nomeArquivo"));
-                saida.writeBoolean(resultadoBusca);
-                saida.close();
-                cliente.close();
+            Mensagem msg = (Mensagem) entrada.readObject();
+            String nomeArquivo = (String) msg.getParam("nomeComExtensao");
+            File arquivo = getArquivo(nomeArquivo);
+            System.out.println("Nome arquivo: " +arquivo.getName() + " tamanho: " +arquivo.length());
+            //saida.writeObject(arquivo);
+            //saida.close();
+            transfereArquivo(arquivo, cliente);
+        }
+    }
+
+    private void transfereArquivo(File file, Socket socket) throws IOException {
+
+        //The InetAddress specification
+        InetAddress IA = InetAddress.getByName("localhost");
+
+        //Specify the file
+        FileInputStream fis = new FileInputStream(file);
+        BufferedInputStream bis = new BufferedInputStream(fis);
+
+        //Get socket's output stream
+        OutputStream os = socket.getOutputStream();
+
+        //Read File Contents into contents array
+        byte[] contents;
+        long fileLength = file.length();
+        long current = 0;
+
+        long start = System.nanoTime();
+        while(current!=fileLength){
+            int size = 10000;
+            if(fileLength - current >= size)
+                current += size;
+            else{
+                size = (int)(fileLength - current);
+                current = fileLength;
             }
-            else if (msg.getOperacao().equals("listarArquivos")){
-                String[] listaDeArquivos = listarArquivos();
-                saida.writeObject(listaDeArquivos);
-                saida.close();
-                cliente.close();
+            contents = new byte[size];
+            bis.read(contents, 0, size);
+            os.write(contents);
+            System.out.println("Enviando arquivo... "+(current*100)/fileLength+"% completo!");
+        }
+        long finish = System.nanoTime();
+        os.flush();
+
+        //File transfer done. Close the socket connection!
+        socket.close();
+        //serverSocketTCP.close();
+        System.out.println("Arquivo enviado com sucesso!");
+        System.out.println("Tempo gasto: " + (finish-start)/1000000 + "ms");
+    }
+
+    private synchronized File getArquivo(String nomeArquivo){
+        File file = new File("rca");
+        String[] arquivos = file.list();
+        for(String arquivo : arquivos) {
+            if (arquivo.contains(nomeArquivo)) {
+                String workingDir = System.getProperty("user.dir");
+                return new File (workingDir+"/rca/"+arquivo);
             }
         }
+        return null;
     }
 
     public synchronized void listarUsuarios(DatagramPacket packet) throws IOException {
         InetAddress address = InetAddress.getLocalHost();
         int port = packet.getPort();
-        System.out.println("Ip servidor: " +address.getHostAddress());
+        //System.out.println("Ip servidor: " +address.getHostAddress());
         packet = new DatagramPacket(buf, buf.length, address, port);
         serverSocketUDP.send(packet);
     }
@@ -82,27 +176,30 @@ public class Server{
         if (!file.exists())
             file.mkdir();
         String[] arquivos = file.list();
-        System.out.println("Arquivos encontrados:");
+        System.out.println("## SERVIDOR ##\nArquivos encontrados:");
         for(String arq : arquivos)
             System.out.println(arq);
         return arquivos;
     }
 
-    public boolean buscarArquivo(String nomeArquivoProcurado){
+    public Mensagem buscarArquivo(String nomeArquivoProcurado){
+        Mensagem mapArquivos = new Mensagem("detalharArquivo");
+        mapArquivos.setParam("arquivoEncontrado", false);
         File file = new File("rca");
-        if (!file.exists()) return false;
+        File arqEncontrado;
+        if (!file.exists()) return mapArquivos;
         String[] arquivos = file.list();
+        int arquivosEncontrados = 0;
         for(String arquivo : arquivos) {
-            if (arquivo.contains(nomeArquivoProcurado))
-                return true;
+            if (arquivo.contains(nomeArquivoProcurado)) {
+                String workingDir = System.getProperty("user.dir");
+                arqEncontrado = new File (workingDir+"/rca/"+arquivo);
+                mapArquivos.setParam("arquivoEncontrado", true);
+                mapArquivos.setParam("nomeComExtensao", arquivo);
+                mapArquivos.setParam("tamanhoArquivo", arqEncontrado.length());
+            }
         }
-        return false;
+        return mapArquivos;
     }
-
-    public boolean transferirArquivo(String arquivo){
-        //TODO transferir arquivo via tcp
-        return false;
-    }
-
 
 }
