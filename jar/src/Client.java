@@ -92,20 +92,20 @@ public class Client implements Runnable{
             if (!diretorio.exists()) diretorio.mkdir();
 
             String rcaPath = System.getProperty("user.dir") + "/rca2/";
-            byte[] contents = new byte[10000];
+            byte[] contents = new byte[4096];
 
             //Initialize the FileOutputStream to the output file's full path.
-            FileOutputStream fos = new FileOutputStream(rcaPath + nomeComExtensao);
-            BufferedOutputStream bos = new BufferedOutputStream(fos);
-            InputStream is = socketTCP.getInputStream();
+            File file = new File(rcaPath, nomeComExtensao);
+            FileOutputStream fileOutput = new FileOutputStream(file);
+            DataInputStream inputStream = new DataInputStream(socketTCP.getInputStream());
 
             //No of bytes read in one read() call
             int bytesRead = 0;
 
-            while((bytesRead=is.read(contents))!=-1)
-                bos.write(contents, 0, bytesRead);
-
-            bos.flush();
+            while((bytesRead = inputStream.read(contents)) != -1)
+                fileOutput.write(contents, 0, bytesRead);
+            fileOutput.close();
+            inputStream.close();
             socketTCP.close();
             return true;
         }
@@ -144,9 +144,7 @@ public class Client implements Runnable{
     }
 
     private synchronized void populaIpsConectados(String ip){
-        if (ipsConectados.contains(ip) || ip.equals("127.0.0.1")) {
-            System.out.println("Ip ja existe na lista ou eh ip local");
-        }else{
+        if (!ipsConectados.contains(ip)){
             ipsConectados.add(ip);
         }
     }

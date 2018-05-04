@@ -113,35 +113,23 @@ public class Server{
         BufferedInputStream buffInputStream = new BufferedInputStream(fileInput);
         DataOutputStream saida = new DataOutputStream(socket.getOutputStream());
 
-        //Le o arquivo no buffer
-        byte[] buffer;
-        long tamanhoDoArquivo = file.length();
-        long tamAux = 0;
-
         long start = System.nanoTime();
-        while(tamAux != tamanhoDoArquivo){
-            int size = 4096;
-            if(tamanhoDoArquivo - tamAux >= size)
-                tamAux += size;
-            else{
-                size = (int)(tamanhoDoArquivo - tamAux);
-                tamAux = tamanhoDoArquivo;
-            }
-            buffer = new byte[size];
-            buffInputStream.read(buffer, 0, size);
-            saida.write(buffer);
-            System.out.println("Enviando arquivo... "+(tamAux*100)/tamanhoDoArquivo+"% completo!");
+        int count;
+        byte[] buffer = new byte[4096];
+        while ((count = buffInputStream.read(buffer)) > 0){
+            saida.write(buffer, 0, count);
         }
         long finish = System.nanoTime();
         saida.flush();
-
+        saida.close();
+        buffInputStream.close();
+        fileInput.close();
         socket.close();
-        //serverSocketTCP.close();
         System.out.println("Arquivo enviado com sucesso!");
         System.out.println("Tempo gasto: " + (finish-start)/1000000 + "ms");
     }
 
-    private synchronized File getArquivo(String nomeArquivo){
+    private File getArquivo(String nomeArquivo){
         File file = new File("rca");
         String[] arquivos = file.list();
         for(String arquivo : arquivos) {
@@ -153,7 +141,7 @@ public class Server{
         return null;
     }
 
-    public synchronized void listarUsuarios(DatagramPacket packet) throws IOException {
+    public void listarUsuarios(DatagramPacket packet) throws IOException {
         InetAddress address = InetAddress.getLocalHost();
         int port = packet.getPort();
         //System.out.println("Ip servidor: " +address.getHostAddress());
@@ -161,7 +149,7 @@ public class Server{
         serverSocketUDP.send(packet);
     }
 
-    public synchronized String[] listarArquivos(){
+    public String[] listarArquivos(){
         File file = new File("rca");
         if (!file.exists())
             file.mkdir();
