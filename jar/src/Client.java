@@ -1,6 +1,10 @@
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Client implements Runnable{
 
@@ -12,11 +16,24 @@ public class Client implements Runnable{
     public Client() throws SocketException {
         ipsConectados = new HashSet<>();
         listaArquivos = new HashMap<>();
-        datagramSocket = new DatagramSocket();
-        datagramSocket.setBroadcast(true);
     }
 
-    private DatagramPacket enviaPacote(Mensagem msg) throws IOException {
+    /**
+     * Cria um pacote do tipo DatagramPacket na porta 5555 com um buffer de tamanho 4096bytes
+     * @return pacote com endereço de broadcast na porta 5555
+     * @throws UnknownHostException
+     */
+    private DatagramPacket criaPacote() throws UnknownHostException {
+        byte[] buffer = new byte[4096];
+        return new DatagramPacket(buffer, buffer.length);
+    }
+
+    /**
+     * Envia um pacote via broadcast para todos os servidores conectados na rede
+     * @param msg = Mensagem que será encaminhada para o servidor através do pacote
+     * @throws IOException
+     */
+    private void enviaPacoteBroadcast(Mensagem msg) throws IOException {
         ByteArrayOutputStream bStream = new ByteArrayOutputStream();
         ObjectOutput saidaObjeto = new ObjectOutputStream(bStream);
         saidaObjeto.writeObject(msg);
@@ -26,21 +43,32 @@ public class Client implements Runnable{
 
         DatagramPacket packet = new DatagramPacket(serializedMsg, serializedMsg.length,
                 InetAddress.getByName("255.255.255.255"), 5555);
+        datagramSocket = new DatagramSocket();
+        datagramSocket.setBroadcast(true);
         datagramSocket.send(packet);
-
-        return packet;
     }
 
+    /**
+     * Envia requisição via broadcast solicitando ip de todos usuários conectados
+     * @throws UnknownHostException
+     * @throws IOException
+     */
     public void listarUsuarios() throws UnknownHostException, IOException {
-        // Serialize to a byte array
         Mensagem msg = new Mensagem("listarUsuarios");
-        DatagramPacket pacote = enviaPacote(msg);
-        //Recebe resposta
-        datagramSocket.receive(pacote);
-        System.out.println("## CLIENTE ##\nUsuários conectados:");
-        String ip = pacote.getAddress().getHostAddress();
-        populaIpsConectados(ip);
-        //datagramSocket.close();
+        enviaPacoteBroadcast(msg);
+        DatagramPacket pacoteResposta = criaPacote();
+        System.out.println("### CLIENTE ###");
+        System.out.println("Clientes conectados:");
+        datagramSocket.setSoTimeout(1000); //Timeout == 1 segundo == 1000millisegundos
+        while(true) {
+            try {
+                datagramSocket.receive(pacoteResposta);
+                new TratamentoRequisicao(pacoteResposta, "listarUsuarios").run();
+            }catch (IOException se){
+                break;
+            }
+        }
+        datagramSocket.close();
     }
 
     //Cliente espera chegar algo na entrada = InputStream
@@ -52,7 +80,7 @@ public class Client implements Runnable{
 
         Mensagem msg = new Mensagem("buscarArquivo");
         msg.setParam("nomeArquivo", nomeArquivo);
-        enviaPacote(msg);
+        enviaPacoteBroadcast(msg);
 
         //Recebe resposta
         byte[] buf = new byte[4096];
@@ -60,7 +88,7 @@ public class Client implements Runnable{
         datagramSocket.receive(pacote);
         ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
         Mensagem resposta = (Mensagem)entrada.readObject();
-
+        entrada.close();
         if ((boolean)resposta.getParam("arquivoEncontrado")){
             System.out.println("## CLIENTE ##");
             String cliente = (String) resposta.getParam("cliente");
@@ -88,10 +116,10 @@ public class Client implements Runnable{
             msg.setParam("nomeComExtensao", nomeComExtensao);
             saida.writeObject(msg);
             saida.flush();
-            File diretorio = new File("rca2");
-            if (!diretorio.exists()) diretorio.mkdir();
+//            File diretorio = new File("rca2");
+//            if (!diretorio.exists()) diretorio.mkdir();
 
-            String rcaPath = System.getProperty("user.dir") + "/rca2/";
+            String rcaPath = System.getProperty("user.dir") + "/rca/";
             byte[] contents = new byte[4096];
 
             //Initialize the FileOutputStream to the output file's full path.
@@ -116,22 +144,23 @@ public class Client implements Runnable{
         if (!file.exists()) return false;
         String arquivoNaPasta[] = file.list();
         for (String arq : arquivoNaPasta)
-            if (arq.equals(arquivoBuscado))
+            if (arq.contains(arquivoBuscado))
                 return true;
         return false;
     }
 
     public void listarArquivos() throws IOException, ClassNotFoundException {
-        Mensagem msg = new Mensagem("listarArquivos");
-        DatagramPacket pacote = enviaPacote(msg);
-        //Recebe resposta
-        datagramSocket.receive(pacote);
-        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
-        String[] listaDeArquivos = (String[]) entrada.readObject();
-        System.out.println("## CLIENTE ##");
-        if (listaDeArquivos.length < 1) System.out.println("Lista de arquivos vazia");
-        populaListaArquivos(pacote.getAddress().getHostAddress(), listaDeArquivos);
-        entrada.close();
+//        Mensagem msg = new Mensagem("listarArquivos");
+//        enviaPacoteBroadcast(msg);
+//        //Recebe resposta
+//        //datagramSocket.receive(pacote);
+//        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
+//        String[] listaDeArquivos = (String[]) entrada.readObject();
+//        entrada.close();
+//        System.out.println("## CLIENTE ##");
+//        if (listaDeArquivos.length < 1) System.out.println("Lista de arquivos vazia");
+//        populaListaArquivos(pacote.getAddress().getHostAddress(), listaDeArquivos);
+//        entrada.close();
     }
 
     private synchronized void populaListaArquivos(String ip, String[] lista){

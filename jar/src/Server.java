@@ -34,7 +34,8 @@ public class Server{
             ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
             Mensagem msg = (Mensagem) entrada.readObject();
             entrada.close();
-            System.out.println("Recebido do ip: "+address.getHostAddress()+ ", operacao: "+ msg.getOperacao());
+            //System.out.println("### SERVIDOR ###");
+            //System.out.println("Recebido do ip: "+address.getHostAddress()+ ", operacao: "+ msg.getOperacao());
 
             if (msg.getOperacao().equals("listarUsuarios")) {
                 buf = new byte[4096];
@@ -90,6 +91,13 @@ public class Server{
         }
     }
 
+    public void listarUsuarios(DatagramPacket packet) throws IOException {
+        InetAddress address = packet.getAddress();
+        int port = packet.getPort();
+        packet = new DatagramPacket(buf, buf.length, address, port);
+        serverSocketUDP.send(packet);
+    }
+
     public void trataConexaoTCP() throws IOException, ClassNotFoundException {
         while(true){
             System.out.println("Esperando conexao TCP...");
@@ -139,14 +147,6 @@ public class Server{
             }
         }
         return null;
-    }
-
-    public void listarUsuarios(DatagramPacket packet) throws IOException {
-        InetAddress address = InetAddress.getLocalHost();
-        int port = packet.getPort();
-        //System.out.println("Ip servidor: " +address.getHostAddress());
-        packet = new DatagramPacket(buf, buf.length, address, port);
-        serverSocketUDP.send(packet);
     }
 
     public String[] listarArquivos(){
