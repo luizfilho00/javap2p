@@ -68,7 +68,7 @@ public class Server{
                 //Cria msg que encapsula resposta
                 Mensagem resposta = buscarArquivo(nomeArquivo);
 
-                String cliente = InetAddress.getByName("localhost").getHostAddress();
+                String cliente = packet.getAddress().getHostAddress();
                 resposta.setParam("cliente", cliente);
 
                 //Cria um array de bytes output

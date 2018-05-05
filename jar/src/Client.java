@@ -107,10 +107,12 @@ public class Client implements Runnable{
      * @throws IOException
      * @throws ClassNotFoundException
      */
-    public void buscarArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+    public HashMap<String, String> buscarArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+        HashMap<String, String> clientesPossuemArquivo = new HashMap<>();
+        final Object mutex = new Object();
         if (arquivoJaExiste(nomeArquivo)){
             System.out.println("Arquivo já existe!");
-            return;
+            return null;
         }
 
         Mensagem msg = new Mensagem("buscarArquivo");
@@ -131,6 +133,9 @@ public class Client implements Runnable{
                         if ((boolean)msgResposta.getParam("arquivoEncontrado")) {
                             String cliente = (String) msgResposta.getParam("cliente");
                             long tamanho = (long) msgResposta.getParam("tamanhoArquivo");
+                            synchronized (mutex){
+                                clientesPossuemArquivo.put(cliente, (String)msgResposta.getParam("nomeComExtensao"));
+                            }
                             System.out.println(cliente + ", tamanho: " + tamanho);
                         }
                     }
@@ -138,11 +143,13 @@ public class Client implements Runnable{
                     catch (ClassNotFoundException e) {}
 
                 };
+                threadBuscaArquivo.run();
             }catch (IOException io){
                 break;
             }
         }
         datagramSocket.close();
+        return clientesPossuemArquivo;
     }
 
     public boolean transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
@@ -180,7 +187,12 @@ public class Client implements Runnable{
 //            socketTCP.close();
 //            return true;
 //        }
-        return false;
+        HashMap<String, String> clientesPossuemArquivo = buscarArquivo(nomeArquivo);
+        for(String cliente : clientesPossuemArquivo.keySet()){
+            String arquivo = clientesPossuemArquivo.get(cliente);
+            System.out.println(cliente + " " + arquivo);
+        }
+        return true;
     }
 
     public void listarArquivos() throws IOException, ClassNotFoundException {
