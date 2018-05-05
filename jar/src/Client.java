@@ -71,74 +71,11 @@ public class Client implements Runnable{
         datagramSocket.close();
     }
 
-    //Cliente espera chegar algo na entrada = InputStream
-    public Mensagem buscarArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
-        if (arquivoJaExiste(nomeArquivo)){
-            System.out.println("Arquivo já existe!");
-            return null;
-        }
-
-        Mensagem msg = new Mensagem("buscarArquivo");
-        msg.setParam("nomeArquivo", nomeArquivo);
-        enviaPacoteBroadcast(msg);
-
-        //Recebe resposta
-        byte[] buf = new byte[4096];
-        DatagramPacket pacote = new DatagramPacket(buf, buf.length);
-        datagramSocket.receive(pacote);
-        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
-        Mensagem resposta = (Mensagem)entrada.readObject();
-        entrada.close();
-        if ((boolean)resposta.getParam("arquivoEncontrado")){
-            System.out.println("## CLIENTE ##");
-            String cliente = (String) resposta.getParam("cliente");
-            long tamanho = (long) resposta.getParam("tamanhoArquivo");
-            System.out.println("Encontrado: " + cliente + ", tamanho: " + tamanho);
-            return resposta;
-        }
-        else{
-            System.out.println("Arquivo não encontrado na RCA!");
-            return null;
-        }
-    }
-
-    public boolean transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
-        Mensagem localizacao = buscarArquivo(nomeArquivo);
-        if (localizacao == null){
-            return false;
-        }
-        else{
-            String ipCliente = (String) localizacao.getParam("cliente");
-            String nomeComExtensao = (String) localizacao.getParam("nomeComExtensao");
-            socketTCP = new Socket(ipCliente, 12002);
-            ObjectOutputStream saida = new ObjectOutputStream(socketTCP.getOutputStream());
-            Mensagem msg = new Mensagem("transferirArquivo");
-            msg.setParam("nomeComExtensao", nomeComExtensao);
-            saida.writeObject(msg);
-            saida.flush();
-//            File diretorio = new File("rca2");
-//            if (!diretorio.exists()) diretorio.mkdir();
-
-            String rcaPath = System.getProperty("user.dir") + "/rca/";
-            byte[] contents = new byte[4096];
-
-            //Initialize the FileOutputStream to the output file's full path.
-            File file = new File(rcaPath, nomeComExtensao);
-            FileOutputStream fileOutput = new FileOutputStream(file);
-            DataInputStream inputStream = new DataInputStream(socketTCP.getInputStream());
-
-            //No of bytes read in one read() call
-            int bytesRead = 0;
-
-            while((bytesRead = inputStream.read(contents)) != -1)
-                fileOutput.write(contents, 0, bytesRead);
-            fileOutput.close();
-            inputStream.close();
-            socketTCP.close();
-            return true;
-        }
-    }
-
+    /**
+     * Verifica se dado arquivo já existe no diretório compartilhado da rca
+     * @param arquivoBuscado
+     * @return true se arquivo já existe, false caso arquivo não exista
+     */
     private boolean arquivoJaExiste(String arquivoBuscado){
         File file = new File("rca");
         if (!file.exists()) return false;
@@ -146,6 +83,103 @@ public class Client implements Runnable{
         for (String arq : arquivoNaPasta)
             if (arq.contains(arquivoBuscado))
                 return true;
+        return false;
+    }
+
+    /**
+     * Popula hashmap listaArquivos com ip do cliente e sua respectiva lista de arquivos com exclusão mútua
+     * @param ip = cliente
+     * @param lista = lista de arquivos de cliente
+     */
+    private synchronized void populaListaArquivos(String ip, String[] lista){
+        listaArquivos.put(ip, lista);
+        for(String cliente : listaArquivos.keySet()){
+            String[] listaDoCliente = listaArquivos.get(cliente);
+            for(String arquivo : listaDoCliente)
+                System.out.println(cliente + " " + arquivo); // Imprime cliente e arquivo encontrado em sua lista
+        }
+    }
+
+    /**
+     * Busca um arquivo na rede compartilhada e informa qual cliente possui o arquivo e seu tamanho em bytes
+     * @param nomeArquivo = nome do arquivo à ser procurado
+     * @return Mensagem contendo informações do arquivo e se este foi encontrado ou não
+     * @throws IOException
+     * @throws ClassNotFoundException
+     */
+    public void buscarArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+        if (arquivoJaExiste(nomeArquivo)){
+            System.out.println("Arquivo já existe!");
+            return;
+        }
+
+        Mensagem msg = new Mensagem("buscarArquivo");
+        msg.setParam("nomeArquivo", nomeArquivo);
+        enviaPacoteBroadcast(msg);
+
+        DatagramPacket pacoteResposta = criaPacote();
+        datagramSocket.setSoTimeout(2000);
+        System.out.println("## CLIENTE ##");
+        while(true) {
+            try {
+                datagramSocket.receive(pacoteResposta);
+                Runnable threadBuscaArquivo = () -> {
+                    try {
+                        ObjectInputStream entrada = new
+                                ObjectInputStream(new ByteArrayInputStream(pacoteResposta.getData()));
+                        Mensagem msgResposta = (Mensagem) entrada.readObject();
+                        if ((boolean)msgResposta.getParam("arquivoEncontrado")) {
+                            String cliente = (String) msgResposta.getParam("cliente");
+                            long tamanho = (long) msgResposta.getParam("tamanhoArquivo");
+                            System.out.println(cliente + ", tamanho: " + tamanho);
+                        }
+                    }
+                    catch (IOException e) {}
+                    catch (ClassNotFoundException e) {}
+
+                };
+            }catch (IOException io){
+                break;
+            }
+        }
+        datagramSocket.close();
+    }
+
+    public boolean transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+//        //Mensagem localizacao = buscarArquivo(nomeArquivo);
+//        if (localizacao == null){
+//            return false;
+//        }
+//        else{
+//            String ipCliente = (String) localizacao.getParam("cliente");
+//            String nomeComExtensao = (String) localizacao.getParam("nomeComExtensao");
+//            socketTCP = new Socket(ipCliente, 12002);
+//            ObjectOutputStream saida = new ObjectOutputStream(socketTCP.getOutputStream());
+//            Mensagem msg = new Mensagem("transferirArquivo");
+//            msg.setParam("nomeComExtensao", nomeComExtensao);
+//            saida.writeObject(msg);
+//            saida.flush();
+////            File diretorio = new File("rca2");
+////            if (!diretorio.exists()) diretorio.mkdir();
+//
+//            String rcaPath = System.getProperty("user.dir") + "/rca/";
+//            byte[] contents = new byte[4096];
+//
+//            //Initialize the FileOutputStream to the output file's full path.
+//            File file = new File(rcaPath, nomeComExtensao);
+//            FileOutputStream fileOutput = new FileOutputStream(file);
+//            DataInputStream inputStream = new DataInputStream(socketTCP.getInputStream());
+//
+//            //No of bytes read in one read() call
+//            int bytesRead = 0;
+//
+//            while((bytesRead = inputStream.read(contents)) != -1)
+//                fileOutput.write(contents, 0, bytesRead);
+//            fileOutput.close();
+//            inputStream.close();
+//            socketTCP.close();
+//            return true;
+//        }
         return false;
     }
 
@@ -161,15 +195,6 @@ public class Client implements Runnable{
 //        if (listaDeArquivos.length < 1) System.out.println("Lista de arquivos vazia");
 //        populaListaArquivos(pacote.getAddress().getHostAddress(), listaDeArquivos);
 //        entrada.close();
-    }
-
-    private synchronized void populaListaArquivos(String ip, String[] lista){
-        listaArquivos.put(ip, lista);
-        for(String cliente : listaArquivos.keySet()){
-            String[] listaDoCliente = listaArquivos.get(cliente);
-            for(String arquivo : listaDoCliente)
-                System.out.println(cliente + " " + arquivo);
-        }
     }
 
     private synchronized void populaIpsConectados(String ip){
