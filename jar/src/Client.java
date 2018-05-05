@@ -208,23 +208,12 @@ public class Client implements Runnable{
 
         final String finalArquivoExtensao = arquivoComExtensao;
         socketTCP = new Socket(ipCliente, portaTCP);
-        socketTCP.setSoTimeout(120000); //2 minutos
-        /**
-         * Cria uma nova thread para cada requisição de download, isso fica ativo durante 2min
-         * TODO Precisam definir um jeito de parar isso, o que eu pensei foi:
-         * Quando finalizar o download aparecer uma mensagem dizendo:
-         * "Downlad finalizado - OK" aí quando a pessao clica em Ok esse While aqui para
-         * Ou quando ela seleciona outra opção
-         */
-        while (true){
-            Runnable threadDownload = () -> {
-                try {
-                    transferirArquivo(finalArquivoExtensao, rcaPath);
-                } catch (IOException e) {
-                }
-            };
-            threadDownload.run();
-        }
+        Runnable threadDownload = () -> {
+            try {
+                transferirArquivo(finalArquivoExtensao, rcaPath);
+            } catch (IOException e) {}
+        };
+        threadDownload.run();
     }
 
     /**

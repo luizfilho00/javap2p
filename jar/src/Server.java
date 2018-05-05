@@ -101,32 +101,41 @@ public class Server{
     public void trataConexaoTCP() throws IOException, ClassNotFoundException {
         while(true){
             System.out.println("Esperando conexao TCP...");
-            Socket socketCliente = serverSocketTCP.accept();
-            System.out.println("Cliente TCP conectado: " + socketCliente.getInetAddress().getHostAddress());
-            OutputStream saidaBytes = socketCliente.getOutputStream();
 
-            ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
-            Mensagem msg = (Mensagem) entradaObjeto.readObject();
+            Runnable threadUpload = () -> {
+                Socket socketCliente = null;
+                try {
+                    socketCliente = serverSocketTCP.accept();
+                    System.out.println("Cliente TCP conectado: " + socketCliente.getInetAddress().getHostAddress());
+                    OutputStream saidaBytes = socketCliente.getOutputStream();
 
-            File diretorio = new File("rca");
-            if (!diretorio.exists()) {
-                System.out.println("Diretorio excluido ou corrompido");
-                return;
-            }
-            String rcaPath = System.getProperty("user.dir") + "/rca/";
+                    ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
+                    Mensagem msg = (Mensagem) entradaObjeto.readObject();
 
-            File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
-            byte[] buffer = new byte [(int)arquivoParaEnvio.length()];
-            FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
-            BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
-            entradaBytes.read(buffer,0,buffer.length);
-            System.out.println("Enviando " + msg.getParam("nomeComExtensao") + "(" + buffer.length + " bytes)");
-            saidaBytes.write(buffer,0,buffer.length);
-            saidaBytes.flush();
-            System.out.println("Enviado!");
+                    File diretorio = new File("rca");
+                    if (!diretorio.exists()) {
+                        System.out.println("Diretorio excluido ou corrompido");
+                        return;
+                    }
+                    String rcaPath = System.getProperty("user.dir") + "/rca/";
 
-            entradaBytes.close();
-            saidaBytes.close();
+                    File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
+                    byte[] buffer = new byte [(int)arquivoParaEnvio.length()];
+                    FileInputStream entradaArquivo = null;
+                    entradaArquivo = new FileInputStream(arquivoParaEnvio);
+                    BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
+                    entradaBytes.read(buffer, 0, buffer.length);
+                    System.out.println("Enviando " + msg.getParam("nomeComExtensao") + "(" + buffer.length + " bytes)");
+                    saidaBytes.write(buffer, 0, buffer.length);
+                    saidaBytes.flush();
+                    System.out.println("Enviado!");
+                    entradaBytes.close();
+                    saidaBytes.close();
+                }
+                catch (IOException ex){}
+                catch (ClassNotFoundException e) {}
+            };
+            threadUpload.run();
         }
     }
 
