@@ -31,7 +31,7 @@ public class Programa {
 		};
 		new Thread(tServidorTCP).start();
 
-		Client clienteA = new Client();
+		Client clienteA = new Client(5555, 12002);
 		Thread tClientA = new Thread(clienteA);
 		tClientA.start();
 	}

@@ -101,40 +101,35 @@ public class Server{
     public void trataConexaoTCP() throws IOException, ClassNotFoundException {
         while(true){
             System.out.println("Esperando conexao TCP...");
-            Socket cliente = serverSocketTCP.accept();
-            System.out.println("Cliente TCP conectado: " + cliente.getInetAddress().getHostAddress());
-            ObjectInputStream entrada = new ObjectInputStream(cliente.getInputStream());
-            ObjectOutputStream saida = new ObjectOutputStream(cliente.getOutputStream());
+            Socket socketCliente = serverSocketTCP.accept();
+            System.out.println("Cliente TCP conectado: " + socketCliente.getInetAddress().getHostAddress());
+            OutputStream saidaBytes = socketCliente.getOutputStream();
 
-            Mensagem msg = (Mensagem) entrada.readObject();
-            String nomeArquivo = (String) msg.getParam("nomeComExtensao");
-            File arquivo = getArquivo(nomeArquivo);
-            System.out.println("Nome arquivo: " +arquivo.getName() + " tamanho: " +arquivo.length());
-            //saida.writeObject(arquivo);
-            //saida.close();
-            transfereArquivo(arquivo, cliente);
+            ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
+            Mensagem msg = (Mensagem) entradaObjeto.readObject();
+
+            File diretorio = new File("rca");
+            if (!diretorio.exists()) {
+                System.out.println("Diretório excluído ou corrompido");
+                return;
+            }
+            String rcaPath = System.getProperty("user.dir") + "/rca/";
+
+            // send file
+            File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
+            byte[] buffer = new byte [(int)arquivoParaEnvio.length()];
+            FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
+            BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
+            entradaBytes.read(buffer,0,buffer.length);
+            saidaBytes = socketCliente.getOutputStream();
+            System.out.println("Enviando " + msg.getParam("nomeComExtensao") + "(" + buffer.length + " bytes)");
+            saidaBytes.write(buffer,0,buffer.length);
+            saidaBytes.flush();
+            System.out.println("Enviado!");
+
+            entradaBytes.close();
+            saidaBytes.close();
         }
-    }
-
-    private void transfereArquivo(File file, Socket socket) throws IOException {
-        FileInputStream fileInput = new FileInputStream(file);
-        BufferedInputStream buffInputStream = new BufferedInputStream(fileInput);
-        DataOutputStream saida = new DataOutputStream(socket.getOutputStream());
-
-        long start = System.nanoTime();
-        int count;
-        byte[] buffer = new byte[4096];
-        while ((count = buffInputStream.read(buffer)) > 0){
-            saida.write(buffer, 0, count);
-        }
-        long finish = System.nanoTime();
-        saida.flush();
-        saida.close();
-        buffInputStream.close();
-        fileInput.close();
-        socket.close();
-        System.out.println("Arquivo enviado com sucesso!");
-        System.out.println("Tempo gasto: " + (finish-start)/1000000 + "ms");
     }
 
     private File getArquivo(String nomeArquivo){
@@ -154,9 +149,6 @@ public class Server{
         if (!file.exists())
             file.mkdir();
         String[] arquivos = file.list();
-        System.out.println("## SERVIDOR ##\nArquivos encontrados:");
-        for(String arq : arquivos)
-            System.out.println(arq);
         return arquivos;
     }
 

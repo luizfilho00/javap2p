@@ -8,14 +8,15 @@ import java.util.concurrent.TimeUnit;
 
 public class Client implements Runnable{
 
-    private HashSet<String> ipsConectados;
     private HashMap<String, String[]> listaArquivos;
     private DatagramSocket datagramSocket;
     private Socket socketTCP;
+    private int portaUDP, portaTCP;
 
-    public Client() throws SocketException {
-        ipsConectados = new HashSet<>();
+    public Client(int portaUDP, int portaTCP)  {
         listaArquivos = new HashMap<>();
+        this.portaUDP = portaUDP;
+        this.portaTCP = portaTCP;
     }
 
     /**
@@ -42,7 +43,7 @@ public class Client implements Runnable{
         byte[] serializedMsg = bStream.toByteArray();
 
         DatagramPacket packet = new DatagramPacket(serializedMsg, serializedMsg.length,
-                InetAddress.getByName("255.255.255.255"), 5555);
+                InetAddress.getByName("255.255.255.255"), portaUDP);
         datagramSocket = new DatagramSocket();
         datagramSocket.setBroadcast(true);
         datagramSocket.send(packet);
@@ -174,55 +175,67 @@ public class Client implements Runnable{
         datagramSocket.close();
     }
 
+
+    /**
+     * Faz download de um arquivo da rede de compartilhamento
+     * @param nomeArquivo = nome do arquivo a ser transferido
+     * @return true se arquivo foi transferido com sucesso, false se não encontrou o arquivo
+     * ou houve falha na transferência
+     * @throws IOException
+     * @throws ClassNotFoundException
+     */
     public boolean transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
-//        //Mensagem localizacao = buscarArquivo(nomeArquivo);
-//        if (localizacao == null){
-//            return false;
-//        }
-//        else{
-//            String ipCliente = (String) localizacao.getParam("cliente");
-//            String nomeComExtensao = (String) localizacao.getParam("nomeComExtensao");
-//            socketTCP = new Socket(ipCliente, 12002);
-//            ObjectOutputStream saida = new ObjectOutputStream(socketTCP.getOutputStream());
-//            Mensagem msg = new Mensagem("transferirArquivo");
-//            msg.setParam("nomeComExtensao", nomeComExtensao);
-//            saida.writeObject(msg);
-//            saida.flush();
-////            File diretorio = new File("rca2");
-////            if (!diretorio.exists()) diretorio.mkdir();
-//
-//            String rcaPath = System.getProperty("user.dir") + "/rca/";
-//            byte[] contents = new byte[4096];
-//
-//            //Initialize the FileOutputStream to the output file's full path.
-//            File file = new File(rcaPath, nomeComExtensao);
-//            FileOutputStream fileOutput = new FileOutputStream(file);
-//            DataInputStream inputStream = new DataInputStream(socketTCP.getInputStream());
-//
-//            //No of bytes read in one read() call
-//            int bytesRead = 0;
-//
-//            while((bytesRead = inputStream.read(contents)) != -1)
-//                fileOutput.write(contents, 0, bytesRead);
-//            fileOutput.close();
-//            inputStream.close();
-//            socketTCP.close();
-//            return true;
-//        }
         HashMap<String, String> clientesPossuemArquivo = buscarArquivo(nomeArquivo);
+
+        File diretorio = new File("rca");
+        if (!diretorio.exists())
+            diretorio.mkdir();
+        String rcaPath = System.getProperty("user.dir") + "/rca/";
+
+        if (clientesPossuemArquivo == null){
+            System.out.println("Arquivo não encontrado na rede!");
+            return false;
+        }
+
+        String ipCliente = null, arquivoComExtensao = null;
         for(String cliente : clientesPossuemArquivo.keySet()){
             String arquivo = clientesPossuemArquivo.get(cliente);
-            System.out.println(cliente + " " + arquivo);
+            ipCliente = cliente;
+            arquivoComExtensao = arquivo;
+            break;
         }
+
+        socketTCP = new Socket(ipCliente, portaTCP);
+        ObjectOutputStream saidaObjeto = new ObjectOutputStream(socketTCP.getOutputStream());
+        Mensagem msg = new Mensagem("transferirArquivo");
+        msg.setParam("nomeComExtensao", arquivoComExtensao);
+        saidaObjeto.writeObject(msg);
+        saidaObjeto.flush();
+
+        FileOutputStream writeFile = new FileOutputStream(rcaPath + arquivoComExtensao);
+        BufferedOutputStream writeBuffer = new BufferedOutputStream(writeFile);
+        InputStream entradaBytes = socketTCP.getInputStream();
+        byte[] buffer = new byte[Integer.MAX_VALUE];
+        int bytesRead = entradaBytes.read(buffer,0, buffer.length);
+        int current = bytesRead;
+        do {
+            bytesRead = entradaBytes.read(buffer, current, (buffer.length-current));
+            if(bytesRead >= 0) current += bytesRead;
+        } while(bytesRead > -1);
+        writeBuffer.write(buffer, 0 , current);
+
+
+        writeBuffer.flush();
+        writeFile.close();
+        writeBuffer.close();
+        socketTCP.close();
+
         return true;
     }
 
-    private synchronized void populaIpsConectados(String ip){
-        if (!ipsConectados.contains(ip)){
-            ipsConectados.add(ip);
-        }
-    }
-
+    /**
+     * Executa thread invocando o método correspondente à requisição desejada
+     */
     @Override
     public void run() {
         try {
