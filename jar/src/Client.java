@@ -152,6 +152,28 @@ public class Client implements Runnable{
         return clientesPossuemArquivo;
     }
 
+    /**
+     * Lista todos os arquivos encontrados na rede compartilhada
+     * @throws IOException
+     * @throws ClassNotFoundException
+     */
+    public void listarArquivos() throws IOException {
+        Mensagem msg = new Mensagem("listarArquivos");
+        enviaPacoteBroadcast(msg);
+
+        DatagramPacket pacoteResposta = criaPacote();
+        datagramSocket.setSoTimeout(3000);
+        while(true) {
+            try {
+                datagramSocket.receive(pacoteResposta);
+                new TratamentoRequisicao(pacoteResposta, "listarArquivos").run();
+            }catch (IOException se){
+                break;
+            }
+        }
+        datagramSocket.close();
+    }
+
     public boolean transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
 //        //Mensagem localizacao = buscarArquivo(nomeArquivo);
 //        if (localizacao == null){
@@ -193,20 +215,6 @@ public class Client implements Runnable{
             System.out.println(cliente + " " + arquivo);
         }
         return true;
-    }
-
-    public void listarArquivos() throws IOException, ClassNotFoundException {
-//        Mensagem msg = new Mensagem("listarArquivos");
-//        enviaPacoteBroadcast(msg);
-//        //Recebe resposta
-//        //datagramSocket.receive(pacote);
-//        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
-//        String[] listaDeArquivos = (String[]) entrada.readObject();
-//        entrada.close();
-//        System.out.println("## CLIENTE ##");
-//        if (listaDeArquivos.length < 1) System.out.println("Lista de arquivos vazia");
-//        populaListaArquivos(pacote.getAddress().getHostAddress(), listaDeArquivos);
-//        entrada.close();
     }
 
     private synchronized void populaIpsConectados(String ip){
