@@ -1,7 +1,7 @@
 import java.io.*;
 import java.net.*;
 
-public class Server implements Runnable{
+public class Server{
 
     private DatagramSocket serverSocketUDP;
     private ServerSocket serverSocketTCP;
@@ -13,16 +13,16 @@ public class Server implements Runnable{
         this.portaTCP = portaTCP;
     }
 
-    private void criaConexaoUDP(int porta) throws IOException {
+    public void criaConexaoUDP(int porta) throws IOException {
         serverSocketUDP = new DatagramSocket(porta);
     }
 
 
-    private void criaConexaoTCP(int porta) throws IOException {
+    public void criaConexaoTCP(int porta) throws IOException {
         serverSocketTCP = new ServerSocket(porta);
     }
 
-    private void trataConexaoUDP() throws IOException, ClassNotFoundException {
+    public void trataConexaoUDP() throws IOException, ClassNotFoundException {
 
         while (true) {
             DatagramPacket pacote = new DatagramPacket(buf, buf.length);
@@ -55,14 +55,7 @@ public class Server implements Runnable{
         }
     }
 
-    private void listarUsuarios(DatagramPacket packet) throws IOException {
-        InetAddress address = packet.getAddress();
-        int port = packet.getPort();
-        packet = new DatagramPacket(buf, buf.length, address, port);
-        serverSocketUDP.send(packet);
-    }
-
-    private void trataConexaoTCP() {
+    public void trataConexaoTCP() {
         while(true){
             Runnable threadUpload = () -> {
                 try {
@@ -95,6 +88,13 @@ public class Server implements Runnable{
             };
             threadUpload.run();
         }
+    }
+
+    private void listarUsuarios(DatagramPacket packet) throws IOException {
+        InetAddress address = packet.getAddress();
+        int port = packet.getPort();
+        packet = new DatagramPacket(buf, buf.length, address, port);
+        serverSocketUDP.send(packet);
     }
 
     private String[] getListaArquivos(){
@@ -173,30 +173,5 @@ public class Server implements Runnable{
             }
         }
         return mapArquivos;
-    }
-
-
-    @Override
-    public void run() {
-        Runnable threadTCP = () -> {
-            try {
-                criaConexaoUDP(portaUDP);
-                trataConexaoUDP();
-            } catch (IOException | ClassNotFoundException e) {
-                e.printStackTrace();
-            }
-        };
-
-        Runnable threadUDP = () -> {
-            try {
-                criaConexaoTCP(portaTCP);
-                trataConexaoTCP();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        };
-
-        threadTCP.run();
-        threadUDP.run();
     }
 }

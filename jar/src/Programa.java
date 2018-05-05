@@ -4,20 +4,43 @@ import java.net.DatagramSocket;
 public class Programa {
 
 	public static void main(String[] args) throws InterruptedException {
-        Client cliente = new Client(5555, 12002);
+	    int portaUDP = 5555;
+	    int portaTCP = 12002;
+        Client cliente = new Client(portaUDP, portaTCP);
         Thread threadCliente = new Thread(cliente);
 
-        Server server = new Server(5555, 12002);
-        Thread threadServidor = new Thread(server);
+        Server server = new Server(portaUDP, portaTCP);
+
+        Runnable servidorUDP = () -> {
+            try {
+                server.criaConexaoUDP(portaUDP);
+                server.trataConexaoUDP();
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        };
+        Thread threadUDP = new Thread(servidorUDP);
+
+        Runnable servidorTCP = () -> {
+            try {
+                server.criaConexaoTCP(portaTCP);
+                server.trataConexaoTCP();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        };
+        Thread threadTCP = new Thread(servidorTCP);
 
         System.out.println("## CLIENTE INICIADO ##");
         System.out.println("## SERVIDOR INICIADO ##");
         threadCliente.start();
-        threadServidor.start();
+        threadUDP.start();
+        threadTCP.start();
 
 		threadCliente.join();
 		if (!threadCliente.isAlive()){
-		    threadServidor.interrupt();
+		    threadTCP.interrupt();
+		    threadUDP.interrupt();
 		    System.exit(0);
         }
 	}
