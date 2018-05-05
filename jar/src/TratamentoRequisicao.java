@@ -45,7 +45,7 @@ public class TratamentoRequisicao implements Runnable{
             case "listarUsuarios":
                 listarIpsConectados();
                 break;
-            case "listarArquivos":
+            case "getListaArquivos":
                 try {
                     listarTodosArquivos();
                 }

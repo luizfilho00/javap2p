@@ -2,20 +2,14 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class Client implements Runnable{
 
-    private HashMap<String, String[]> listaArquivos;
     private DatagramSocket datagramSocket;
     private Socket socketTCP;
     private int portaUDP, portaTCP;
 
-    public Client(int portaUDP, int portaTCP)  {
-        listaArquivos = new HashMap<>();
+    Client(int portaUDP, int portaTCP)  {
         this.portaUDP = portaUDP;
         this.portaTCP = portaTCP;
     }
@@ -23,9 +17,8 @@ public class Client implements Runnable{
     /**
      * Cria um pacote do tipo DatagramPacket na porta 5555 com um buffer de tamanho 4096bytes
      * @return pacote com endereço de broadcast na porta 5555
-     * @throws UnknownHostException
      */
-    private DatagramPacket criaPacote() throws UnknownHostException {
+    private DatagramPacket criaPacote() {
         byte[] buffer = new byte[4096];
         return new DatagramPacket(buffer, buffer.length);
     }
@@ -33,7 +26,7 @@ public class Client implements Runnable{
     /**
      * Envia um pacote via broadcast para todos os servidores conectados na rede
      * @param msg = Mensagem que será encaminhada para o servidor através do pacote
-     * @throws IOException
+     * @throws IOException;
      */
     private void enviaPacoteBroadcast(Mensagem msg) throws IOException {
         ByteArrayOutputStream bStream = new ByteArrayOutputStream();
@@ -52,14 +45,13 @@ public class Client implements Runnable{
 
     /**
      * Envia requisição via broadcast solicitando ip de todos usuários conectados
-     * @throws UnknownHostException
-     * @throws IOException
+     * @throws UnknownHostException;
+     * @throws IOException;
      */
-    public void listarUsuarios() throws UnknownHostException, IOException {
+    private void listarUsuarios() throws UnknownHostException, IOException {
         Mensagem msg = new Mensagem("listarUsuarios");
         enviaPacoteBroadcast(msg);
         DatagramPacket pacoteResposta = criaPacote();
-        System.out.println("### CLIENTE ###");
         System.out.println("Clientes conectados:");
         datagramSocket.setSoTimeout(1000); //Timeout == 1 segundo == 1000millisegundos
         while(true) {
@@ -75,45 +67,32 @@ public class Client implements Runnable{
 
     /**
      * Verifica se dado arquivo já existe no diretório compartilhado da rca
-     * @param arquivoBuscado
+     * @param arquivoBuscado = nome do arquivo
      * @return true se arquivo já existe, false caso arquivo não exista
      */
     private boolean arquivoJaExiste(String arquivoBuscado){
         File file = new File("rca");
         if (!file.exists()) return false;
         String arquivoNaPasta[] = file.list();
-        for (String arq : arquivoNaPasta)
-            if (arq.contains(arquivoBuscado))
-                return true;
-        return false;
-    }
-
-    /**
-     * Popula hashmap listaArquivos com ip do cliente e sua respectiva lista de arquivos com exclusão mútua
-     * @param ip = cliente
-     * @param lista = lista de arquivos de cliente
-     */
-    private synchronized void populaListaArquivos(String ip, String[] lista){
-        listaArquivos.put(ip, lista);
-        for(String cliente : listaArquivos.keySet()){
-            String[] listaDoCliente = listaArquivos.get(cliente);
-            for(String arquivo : listaDoCliente)
-                System.out.println(cliente + " " + arquivo); // Imprime cliente e arquivo encontrado em sua lista
+        if (arquivoNaPasta != null){
+            for (String arq : arquivoNaPasta)
+                if (arq.contains(arquivoBuscado))
+                    return true;
         }
+        return false;
     }
 
     /**
      * Busca um arquivo na rede compartilhada e informa qual cliente possui o arquivo e seu tamanho em bytes
      * @param nomeArquivo = nome do arquivo à ser procurado
      * @return Mensagem contendo informações do arquivo e se este foi encontrado ou não
-     * @throws IOException
-     * @throws ClassNotFoundException
+     * @throws IOException = Exceção caso operação IO ocorra falha
      */
-    public HashMap<String, String> buscarArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+    private HashMap<String, String> buscarArquivo(String nomeArquivo) throws IOException {
         HashMap<String, String> clientesPossuemArquivo = new HashMap<>();
         final Object mutex = new Object();
         if (arquivoJaExiste(nomeArquivo)){
-            System.out.println("Arquivo já existe!");
+            System.out.println("Arquivo \"" + nomeArquivo + "\" ja existe em seu diretorio");
             return null;
         }
 
@@ -122,8 +101,8 @@ public class Client implements Runnable{
         enviaPacoteBroadcast(msg);
 
         DatagramPacket pacoteResposta = criaPacote();
-        datagramSocket.setSoTimeout(2000);
-        System.out.println("## CLIENTE ##");
+        datagramSocket.setSoTimeout(1000);
+        System.out.println("Buscando arquivo \"" + nomeArquivo + "\" na rede...");
         while(true) {
             try {
                 datagramSocket.receive(pacoteResposta);
@@ -141,9 +120,7 @@ public class Client implements Runnable{
                             System.out.println(cliente + ", tamanho: " + tamanho);
                         }
                     }
-                    catch (IOException e) {}
-                    catch (ClassNotFoundException e) {}
-
+                    catch (IOException | ClassNotFoundException ignored) {}
                 };
                 threadBuscaArquivo.run();
             }catch (IOException io){
@@ -151,24 +128,25 @@ public class Client implements Runnable{
             }
         }
         datagramSocket.close();
+        if (clientesPossuemArquivo.size() < 1) System.out.println("Arquivo \"" + nomeArquivo + "\" não existe na rede!");
         return clientesPossuemArquivo;
     }
 
     /**
      * Lista todos os arquivos encontrados na rede compartilhada
-     * @throws IOException
-     * @throws ClassNotFoundException
+     * @throws IOException;
      */
-    public void listarArquivos() throws IOException {
-        Mensagem msg = new Mensagem("listarArquivos");
+    private void listarArquivos() throws IOException {
+        Mensagem msg = new Mensagem("getListaArquivos");
         enviaPacoteBroadcast(msg);
 
         DatagramPacket pacoteResposta = criaPacote();
-        datagramSocket.setSoTimeout(3000);
+        datagramSocket.setSoTimeout(2000);
+        System.out.println("Arquivos encontrados na rede:");
         while(true) {
             try {
                 datagramSocket.receive(pacoteResposta);
-                new TratamentoRequisicao(pacoteResposta, "listarArquivos").run();
+                new TratamentoRequisicao(pacoteResposta, "getListaArquivos").run();
             }catch (IOException se){
                 break;
             }
@@ -180,29 +158,34 @@ public class Client implements Runnable{
     /**
      * Faz download de um arquivo da rede de compartilhamento
      * @param nomeArquivo = nome do arquivo a ser transferido
-     * @return true se arquivo foi transferido com sucesso, false se não encontrou o arquivo
      * ou houve falha na transferência
-     * @throws IOException
-     * @throws ClassNotFoundException
+     * @throws IOException;
      */
-    public void transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+    private void transferirArquivo(String nomeArquivo) throws IOException {
         HashMap<String, String> clientesPossuemArquivo = buscarArquivo(nomeArquivo);
 
         File diretorio = new File("rca");
         if (!diretorio.exists())
-            diretorio.mkdir();
+            if (!diretorio.mkdir()){
+                System.out.println("Houve um erro ao criar diretorio, tente novamente...");
+                return;
+            }
         String rcaPath = System.getProperty("user.dir") + "/rca/";
 
         String ipCliente = null, arquivoComExtensao = null;
-        for(String cliente : clientesPossuemArquivo.keySet()){
-            String arquivo = clientesPossuemArquivo.get(cliente);
-            ipCliente = cliente;
-            arquivoComExtensao = arquivo;
-            break;
+        if (clientesPossuemArquivo != null){
+            for(String cliente : clientesPossuemArquivo.keySet()){
+                String arquivo = clientesPossuemArquivo.get(cliente);
+                ipCliente = cliente;
+                arquivoComExtensao = arquivo;
+                break;
+            }
+        }
+        else{
+            return;
         }
 
         if (arquivoComExtensao == null) {
-            System.out.println("Arquivo não existe na rede!");
             return;
         }
 
@@ -211,7 +194,7 @@ public class Client implements Runnable{
         Runnable threadDownload = () -> {
             try {
                 transferirArquivo(finalArquivoExtensao, rcaPath);
-            } catch (IOException e) {}
+            } catch (IOException ignored) {}
         };
         threadDownload.run();
     }
@@ -220,7 +203,7 @@ public class Client implements Runnable{
      * Método privado que trata da conexão com a rede para transferir o arquivo solicitado
      * @param arquivoComExtensao = Nome do arquivo com sua extensão
      * @param rcaPath = Caminho da pasta compartilhada entre os programas da rede
-     * @throws IOException
+     * @throws IOException;
      */
     private void transferirArquivo(String arquivoComExtensao, String rcaPath) throws IOException {
         ObjectOutputStream saidaObjeto = new ObjectOutputStream(socketTCP.getOutputStream());
@@ -278,13 +261,13 @@ public class Client implements Runnable{
                         nomeArquivo = leitor.readLine();
                         transferirArquivo(nomeArquivo);
                         break;
+                    case "0":
+                        return;
                     default:
                         break;
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
     }

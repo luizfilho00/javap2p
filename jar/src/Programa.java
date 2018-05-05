@@ -3,37 +3,23 @@ import java.net.DatagramSocket;
 
 public class Programa {
 
-	public static void main(String[] args) throws IOException{
-		Server servidor = new Server();
-		Runnable tServidorUDP = () -> {
-			try {
-				servidor.criaConexaoUDP(5555);
-				servidor.trataConexaoUDP();
-			} catch (IOException e) {
-				e.printStackTrace();
-			} catch (ClassNotFoundException e) {
-				e.printStackTrace();
-			}
-			System.out.println("Conexao UDP finalizada");
-		};
-		new Thread(tServidorUDP).start();
+	public static void main(String[] args) throws InterruptedException {
+        Client cliente = new Client(5555, 12002);
+        Thread threadCliente = new Thread(cliente);
 
-		Runnable tServidorTCP = () -> {
-			try {
-				servidor.criaConexaoTCP(12002);
-				servidor.trataConexaoTCP();
-			} catch (IOException e) {
-				e.printStackTrace();
-			} catch (ClassNotFoundException e) {
-				e.printStackTrace();
-			}
-			System.out.println("Conexao TCP finalizada");
-		};
-		new Thread(tServidorTCP).start();
+        Server server = new Server(5555, 12002);
+        Thread threadServidor = new Thread(server);
 
-		Client clienteA = new Client(5555, 12002);
-		Thread tClientA = new Thread(clienteA);
-		tClientA.start();
+        System.out.println("## CLIENTE INICIADO ##");
+        System.out.println("## SERVIDOR INICIADO ##");
+        threadCliente.start();
+        threadServidor.start();
+
+		threadCliente.join();
+		if (!threadCliente.isAlive()){
+		    threadServidor.interrupt();
+		    System.exit(0);
+        }
 	}
 
 }
