@@ -110,18 +110,16 @@ public class Server{
 
             File diretorio = new File("rca");
             if (!diretorio.exists()) {
-                System.out.println("Diretório excluído ou corrompido");
+                System.out.println("Diretorio excluido ou corrompido");
                 return;
             }
             String rcaPath = System.getProperty("user.dir") + "/rca/";
 
-            // send file
             File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
             byte[] buffer = new byte [(int)arquivoParaEnvio.length()];
             FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
             BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
             entradaBytes.read(buffer,0,buffer.length);
-            saidaBytes = socketCliente.getOutputStream();
             System.out.println("Enviando " + msg.getParam("nomeComExtensao") + "(" + buffer.length + " bytes)");
             saidaBytes.write(buffer,0,buffer.length);
             saidaBytes.flush();
@@ -130,18 +128,6 @@ public class Server{
             entradaBytes.close();
             saidaBytes.close();
         }
-    }
-
-    private File getArquivo(String nomeArquivo){
-        File file = new File("rca");
-        String[] arquivos = file.list();
-        for(String arquivo : arquivos) {
-            if (arquivo.contains(nomeArquivo)) {
-                String workingDir = System.getProperty("user.dir");
-                return new File (workingDir+"/rca/"+arquivo);
-            }
-        }
-        return null;
     }
 
     public String[] listarArquivos(){

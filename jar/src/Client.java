@@ -5,6 +5,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class Client implements Runnable{
 
@@ -184,18 +185,13 @@ public class Client implements Runnable{
      * @throws IOException
      * @throws ClassNotFoundException
      */
-    public boolean transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
+    public void transferirArquivo(String nomeArquivo) throws IOException, ClassNotFoundException {
         HashMap<String, String> clientesPossuemArquivo = buscarArquivo(nomeArquivo);
 
         File diretorio = new File("rca");
         if (!diretorio.exists())
             diretorio.mkdir();
         String rcaPath = System.getProperty("user.dir") + "/rca/";
-
-        if (clientesPossuemArquivo == null){
-            System.out.println("Arquivo não encontrado na rede!");
-            return false;
-        }
 
         String ipCliente = null, arquivoComExtensao = null;
         for(String cliente : clientesPossuemArquivo.keySet()){
@@ -205,7 +201,39 @@ public class Client implements Runnable{
             break;
         }
 
+        if (arquivoComExtensao == null) {
+            System.out.println("Arquivo não existe na rede!");
+            return;
+        }
+
+        final String finalArquivoExtensao = arquivoComExtensao;
         socketTCP = new Socket(ipCliente, portaTCP);
+        socketTCP.setSoTimeout(120000); //2 minutos
+        /**
+         * Cria uma nova thread para cada requisição de download, isso fica ativo durante 2min
+         * TODO Precisam definir um jeito de parar isso, o que eu pensei foi:
+         * Quando finalizar o download aparecer uma mensagem dizendo:
+         * "Downlad finalizado - OK" aí quando a pessao clica em Ok esse While aqui para
+         * Ou quando ela seleciona outra opção
+         */
+        while (true){
+            Runnable threadDownload = () -> {
+                try {
+                    transferirArquivo(finalArquivoExtensao, rcaPath);
+                } catch (IOException e) {
+                }
+            };
+            threadDownload.run();
+        }
+    }
+
+    /**
+     * Método privado que trata da conexão com a rede para transferir o arquivo solicitado
+     * @param arquivoComExtensao = Nome do arquivo com sua extensão
+     * @param rcaPath = Caminho da pasta compartilhada entre os programas da rede
+     * @throws IOException
+     */
+    private void transferirArquivo(String arquivoComExtensao, String rcaPath) throws IOException {
         ObjectOutputStream saidaObjeto = new ObjectOutputStream(socketTCP.getOutputStream());
         Mensagem msg = new Mensagem("transferirArquivo");
         msg.setParam("nomeComExtensao", arquivoComExtensao);
@@ -215,7 +243,7 @@ public class Client implements Runnable{
         FileOutputStream writeFile = new FileOutputStream(rcaPath + arquivoComExtensao);
         BufferedOutputStream writeBuffer = new BufferedOutputStream(writeFile);
         InputStream entradaBytes = socketTCP.getInputStream();
-        byte[] buffer = new byte[Integer.MAX_VALUE];
+        byte[] buffer = new byte[6022386];
         int bytesRead = entradaBytes.read(buffer,0, buffer.length);
         int current = bytesRead;
         do {
@@ -224,13 +252,9 @@ public class Client implements Runnable{
         } while(bytesRead > -1);
         writeBuffer.write(buffer, 0 , current);
 
-
         writeBuffer.flush();
         writeFile.close();
         writeBuffer.close();
-        socketTCP.close();
-
-        return true;
     }
 
     /**
