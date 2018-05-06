@@ -3,7 +3,7 @@ import java.net.DatagramSocket;
 
 public class Programa {
 
-	public static void main(String[] args) throws InterruptedException {
+	public static void main(String[] args) throws InterruptedException, IOException {
 	    int portaUDP = 5555;
 	    int portaTCP = 12002;
         Client cliente = new Client(portaUDP, portaTCP);
@@ -13,7 +13,7 @@ public class Programa {
 
         Runnable servidorUDP = () -> {
             try {
-                server.criaConexaoUDP(portaUDP);
+                server.criaConexaoUDP();
                 server.trataConexaoUDP();
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
@@ -23,7 +23,7 @@ public class Programa {
 
         Runnable servidorTCP = () -> {
             try {
-                server.criaConexaoTCP(portaTCP);
+                server.criaConexaoTCP();
                 server.trataConexaoTCP();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -39,6 +39,7 @@ public class Programa {
 
 		threadCliente.join();
 		if (!threadCliente.isAlive()){
+		    server.fechaLog();
 		    threadTCP.interrupt();
 		    threadUDP.interrupt();
 		    System.exit(0);

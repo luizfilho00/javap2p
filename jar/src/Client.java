@@ -166,10 +166,7 @@ public class Client implements Runnable{
 
         File diretorio = new File("rca");
         if (!diretorio.exists())
-            if (!diretorio.mkdir()){
-                System.out.println("Houve um erro ao criar diretorio, tente novamente...");
-                return;
-            }
+            diretorio.mkdir();
         String rcaPath = System.getProperty("user.dir") + "/rca/";
 
         String ipCliente = null, arquivoComExtensao = null;

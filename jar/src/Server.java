@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.time.LocalDateTime;
 
 public class Server{
 
@@ -7,19 +8,24 @@ public class Server{
     private ServerSocket serverSocketTCP;
     private byte[] buf = new byte[4096];
     private int portaUDP, portaTCP;
+    private File log;
+    private FileWriter gravaLog;
 
-    Server(int portaUDP, int portaTCP){
+    Server(int portaUDP, int portaTCP) throws IOException {
+        this.log = new File("log.txt");
+        this.gravaLog = new FileWriter(log);
+        gravaLog.write("IP\t\t\t\tOperacao\t\t\t\t\tData\\Hora\n");
         this.portaUDP = portaUDP;
         this.portaTCP = portaTCP;
     }
 
-    public void criaConexaoUDP(int porta) throws IOException {
-        serverSocketUDP = new DatagramSocket(porta);
+    public void criaConexaoUDP() throws IOException {
+        serverSocketUDP = new DatagramSocket(portaUDP);
     }
 
 
-    public void criaConexaoTCP(int porta) throws IOException {
-        serverSocketTCP = new ServerSocket(porta);
+    public void criaConexaoTCP() throws IOException {
+        serverSocketTCP = new ServerSocket(portaTCP);
     }
 
     public void trataConexaoUDP() throws IOException, ClassNotFoundException {
@@ -31,7 +37,6 @@ public class Server{
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
             InetAddress address = pacote.getAddress();
             int port = pacote.getPort();
             pacote = new DatagramPacket(buf, buf.length, address, port);
@@ -41,13 +46,16 @@ public class Server{
 
             switch (msg.getOperacao()){
                 case "listarUsuarios":
+                    gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t\t" + LocalDateTime.now() + "\n");
                     listarUsuarios(pacote);
                     break;
                 case "getListaArquivos":
+                    gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t" + LocalDateTime.now() + "\n");
                     String[] listaArquivos = getListaArquivos();
                     listarArquivos(listaArquivos, pacote);
                     break;
                 case "buscarArquivo":
+                    gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t\t" + LocalDateTime.now() + "\n");
                     String nomeArquivo = (String) msg.getParam("nomeArquivo");
                     enviaResultadoBusca(pacote, nomeArquivo);
                     break;
@@ -60,6 +68,7 @@ public class Server{
             Runnable threadUpload = () -> {
                 try {
                     Socket socketCliente = serverSocketTCP.accept();
+                    gravaLog.write(socketCliente.getInetAddress().getHostAddress() + "\t" + "transferirArquivo" + "\t\t\t\t" + LocalDateTime.now() + "\n");
                     OutputStream saidaBytes = socketCliente.getOutputStream();
 
                     ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
@@ -173,5 +182,9 @@ public class Server{
             }
         }
         return mapArquivos;
+    }
+
+    public void fechaLog() throws IOException {
+        gravaLog.close();
     }
 }
