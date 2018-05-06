@@ -39,6 +39,7 @@ public class Programa {
 
 		threadCliente.join();
 		if (!threadCliente.isAlive()){
+            System.out.println("Finalizando programa...");
 		    server.fechaLog();
 		    threadTCP.interrupt();
 		    threadUDP.interrupt();

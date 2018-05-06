@@ -112,7 +112,7 @@ public class Client implements Runnable{
                                 ObjectInputStream(new ByteArrayInputStream(pacoteResposta.getData()));
                         Mensagem msgResposta = (Mensagem) entrada.readObject();
                         if ((boolean)msgResposta.getParam("arquivoEncontrado")) {
-                            String cliente = (String) msgResposta.getParam("cliente");
+                            String cliente = pacoteResposta.getAddress().getHostAddress();
                             long tamanho = (long) msgResposta.getParam("tamanhoArquivo");
                             synchronized (mutex){
                                 clientesPossuemArquivo.put(cliente, (String)msgResposta.getParam("nomeComExtensao"));
@@ -213,12 +213,13 @@ public class Client implements Runnable{
         BufferedOutputStream writeBuffer = new BufferedOutputStream(writeFile);
         InputStream entradaBytes = socketTCP.getInputStream();
         byte[] buffer = new byte[6022386];
-        int bytesRead = entradaBytes.read(buffer,0, buffer.length);
-        int current = bytesRead;
-        do {
+        //int bytesRead = entradaBytes.read(buffer,0, buffer.length);
+        //int current = bytesRead;
+        int bytesRead = 0, current = 0;
+        while(bytesRead > -1){
             bytesRead = entradaBytes.read(buffer, current, (buffer.length-current));
             if(bytesRead >= 0) current += bytesRead;
-        } while(bytesRead > -1);
+        }
         writeBuffer.write(buffer, 0 , current);
 
         writeBuffer.flush();
@@ -259,6 +260,8 @@ public class Client implements Runnable{
                         transferirArquivo(nomeArquivo);
                         break;
                     case "0":
+                        if (socketTCP != null)
+                            socketTCP.close();
                         return;
                     default:
                         break;

@@ -68,7 +68,8 @@ public class Server{
             Runnable threadUpload = () -> {
                 try {
                     Socket socketCliente = serverSocketTCP.accept();
-                    gravaLog.write(socketCliente.getInetAddress().getHostAddress() + "\t" + "transferirArquivo" + "\t\t\t\t" + LocalDateTime.now() + "\n");
+                    gravaLog.write(socketCliente.getInetAddress().getHostAddress()
+                            + "\t" + "transferirArquivo" + "\t\t\t" + LocalDateTime.now());
                     OutputStream saidaBytes = socketCliente.getOutputStream();
 
                     ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
@@ -86,9 +87,14 @@ public class Server{
                     FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
                     BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
                     entradaBytes.read(buffer, 0, buffer.length);
-                    System.out.println("Enviando " + msg.getParam("nomeComExtensao") + "(" + buffer.length + " bytes)");
+                    System.out.println("Enviando " + msg.getParam("nomeComExtensao")
+                            + " (" + buffer.length + " bytes) para "
+                            + socketCliente.getInetAddress().getHostAddress() + "...");
+                    long tempoInicio = System.nanoTime();
                     saidaBytes.write(buffer, 0, buffer.length);
                     saidaBytes.flush();
+                    long tempoFim = System.nanoTime();
+                    gravaLog.write(" tempo gasto: " + (tempoFim - tempoInicio)/1000000 + "ms\n");
                     System.out.println("Enviado!");
                     entradaBytes.close();
                     saidaBytes.close();
@@ -141,9 +147,6 @@ public class Server{
         //Cria msg que encapsula resposta
         Mensagem resposta = buscarArquivo(nomeArquivo);
 
-        String cliente = pacote.getAddress().getHostAddress();
-        resposta.setParam("cliente", cliente);
-
         //Cria um array de bytes output
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         //Cria um object output para encapsular o objeto a ser enviado na rede
@@ -186,5 +189,6 @@ public class Server{
 
     public void fechaLog() throws IOException {
         gravaLog.close();
+        serverSocketTCP.close();
     }
 }
