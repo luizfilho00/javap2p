@@ -13,8 +13,7 @@ public class Server{
 
     Server(int portaUDP, int portaTCP) throws IOException {
         this.log = new File("log.txt");
-        this.gravaLog = new FileWriter(log);
-        gravaLog.write("IP\t\t\t\tOperacao\t\t\t\t\tData\\Hora\n");
+        this.gravaLog = new FileWriter(log, true);
         this.portaUDP = portaUDP;
         this.portaTCP = portaTCP;
     }
@@ -83,21 +82,25 @@ public class Server{
                     String rcaPath = System.getProperty("user.dir") + "/rca/";
 
                     File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
-                    byte[] buffer = new byte [(int)arquivoParaEnvio.length()];
                     FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
                     BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
-                    entradaBytes.read(buffer, 0, buffer.length);
-                    System.out.println("Enviando " + msg.getParam("nomeComExtensao")
-                            + " (" + buffer.length + " bytes) para "
-                            + socketCliente.getInetAddress().getHostAddress() + "...");
                     long tempoInicio = System.nanoTime();
-                    saidaBytes.write(buffer, 0, buffer.length);
+                    long tamanhoArquivo = (long) msg.getParam("tamanhoArquivo");
+                    System.out.println("Enviando " + msg.getParam("nomeComExtensao")
+                            + " (" + tamanhoArquivo + " bytes) para "
+                            + socketCliente.getInetAddress().getHostAddress() + "...");
+                    int count;
+                    byte[] buffer = new byte[8192];
+                    while ((count = entradaBytes.read(buffer)) > 0){
+                        saidaBytes.write(buffer, 0, count);
+                    }
                     saidaBytes.flush();
                     long tempoFim = System.nanoTime();
                     gravaLog.write(" tempo gasto: " + (tempoFim - tempoInicio)/1000000 + "ms\n");
                     System.out.println("Enviado!");
                     entradaBytes.close();
                     saidaBytes.close();
+                    entradaObjeto.close();
                 }
                 catch (IOException | ClassNotFoundException ignored){}
             };

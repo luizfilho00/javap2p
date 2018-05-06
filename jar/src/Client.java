@@ -88,7 +88,7 @@ public class Client implements Runnable{
      * @return Mensagem contendo informações do arquivo e se este foi encontrado ou não
      * @throws IOException = Exceção caso operação IO ocorra falha
      */
-    private HashMap<String, String> buscarArquivo(String nomeArquivo) throws IOException {
+    private Mensagem buscarArquivo(String nomeArquivo) throws IOException {
         HashMap<String, String> clientesPossuemArquivo = new HashMap<>();
         final Object mutex = new Object();
         if (arquivoJaExiste(nomeArquivo)){
@@ -103,6 +103,8 @@ public class Client implements Runnable{
         DatagramPacket pacoteResposta = criaPacote();
         datagramSocket.setSoTimeout(1000);
         System.out.println("Buscando arquivo \"" + nomeArquivo + "\" na rede...");
+        Mensagem arquivoDetalhado = new Mensagem("detalharArquivo");
+        arquivoDetalhado.setParam("arquivoEncontrado", false);
         while(true) {
             try {
                 datagramSocket.receive(pacoteResposta);
@@ -115,7 +117,11 @@ public class Client implements Runnable{
                             String cliente = pacoteResposta.getAddress().getHostAddress();
                             long tamanho = (long) msgResposta.getParam("tamanhoArquivo");
                             synchronized (mutex){
-                                clientesPossuemArquivo.put(cliente, (String)msgResposta.getParam("nomeComExtensao"));
+                                arquivoDetalhado.setParam("arquivoEncontrado", true);
+                                arquivoDetalhado.setParam("tamanhoArquivo", tamanho);
+                                arquivoDetalhado.setParam("ipCliente", cliente);
+                                arquivoDetalhado.setParam("nomeComExtensao",
+                                        msgResposta.getParam("nomeComExtensao"));
                             }
                             System.out.println(cliente + ", tamanho: " + tamanho);
                         }
@@ -128,8 +134,7 @@ public class Client implements Runnable{
             }
         }
         datagramSocket.close();
-        if (clientesPossuemArquivo.size() < 1) System.out.println("Arquivo \"" + nomeArquivo + "\" não existe na rede!");
-        return clientesPossuemArquivo;
+        return arquivoDetalhado;
     }
 
     /**
@@ -162,35 +167,24 @@ public class Client implements Runnable{
      * @throws IOException;
      */
     private void transferirArquivo(String nomeArquivo) throws IOException {
-        HashMap<String, String> clientesPossuemArquivo = buscarArquivo(nomeArquivo);
+        Mensagem arquivoDetalhado = buscarArquivo(nomeArquivo);
 
         File diretorio = new File("rca");
         if (!diretorio.exists())
             diretorio.mkdir();
         String rcaPath = System.getProperty("user.dir") + "/rca/";
 
-        String ipCliente = null, arquivoComExtensao = null;
-        if (clientesPossuemArquivo != null){
-            for(String cliente : clientesPossuemArquivo.keySet()){
-                String arquivo = clientesPossuemArquivo.get(cliente);
-                ipCliente = cliente;
-                arquivoComExtensao = arquivo;
-                break;
-            }
-        }
-        else{
+        if (arquivoDetalhado == null) return;
+        if (!(boolean)arquivoDetalhado.getParam("arquivoEncontrado"))
             return;
-        }
 
-        if (arquivoComExtensao == null) {
-            return;
-        }
-
-        final String finalArquivoExtensao = arquivoComExtensao;
+        String ipCliente = (String) arquivoDetalhado.getParam("ipCliente");
+        final String nomeArquivoComExtensao = (String) arquivoDetalhado.getParam("nomeComExtensao");
+        final long tamanhoDoArquivo = (long) arquivoDetalhado.getParam("tamanhoArquivo");
         socketTCP = new Socket(ipCliente, portaTCP);
         Runnable threadDownload = () -> {
             try {
-                transferirArquivo(finalArquivoExtensao, rcaPath);
+                transferirArquivo(nomeArquivoComExtensao, tamanhoDoArquivo, rcaPath);
             } catch (IOException ignored) {}
         };
         threadDownload.run();
@@ -202,29 +196,26 @@ public class Client implements Runnable{
      * @param rcaPath = Caminho da pasta compartilhada entre os programas da rede
      * @throws IOException;
      */
-    private void transferirArquivo(String arquivoComExtensao, String rcaPath) throws IOException {
+    private void transferirArquivo(String arquivoComExtensao, long tamanhoDoArquivo, String rcaPath) throws IOException {
         ObjectOutputStream saidaObjeto = new ObjectOutputStream(socketTCP.getOutputStream());
         Mensagem msg = new Mensagem("transferirArquivo");
         msg.setParam("nomeComExtensao", arquivoComExtensao);
+        msg.setParam("tamanhoArquivo", tamanhoDoArquivo);
         saidaObjeto.writeObject(msg);
         saidaObjeto.flush();
 
         FileOutputStream writeFile = new FileOutputStream(rcaPath + arquivoComExtensao);
         BufferedOutputStream writeBuffer = new BufferedOutputStream(writeFile);
         InputStream entradaBytes = socketTCP.getInputStream();
-        byte[] buffer = new byte[6022386];
-        //int bytesRead = entradaBytes.read(buffer,0, buffer.length);
-        //int current = bytesRead;
-        int bytesRead = 0, current = 0;
-        while(bytesRead > -1){
-            bytesRead = entradaBytes.read(buffer, current, (buffer.length-current));
-            if(bytesRead >= 0) current += bytesRead;
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = entradaBytes.read(buffer)) > 0){
+            writeBuffer.write(buffer, 0, count);
         }
-        writeBuffer.write(buffer, 0 , current);
-
         writeBuffer.flush();
-        writeFile.close();
         writeBuffer.close();
+        writeFile.close();
+        saidaObjeto.close();
     }
 
     /**
@@ -242,6 +233,7 @@ public class Client implements Runnable{
                 System.out.println("4 - Transferir arquivo");
                 System.out.println("0 - Sair");
                 BufferedReader leitor = new BufferedReader(new InputStreamReader(System.in));
+                System.out.print("Opcao: ");
                 comando = leitor.readLine();
                 String nomeArquivo;
                 switch(comando){
@@ -249,6 +241,7 @@ public class Client implements Runnable{
                         listarUsuarios();
                         break;
                     case "2":
+                        System.out.print("Nome do arquivo: ");
                         nomeArquivo = leitor.readLine();
                         buscarArquivo(nomeArquivo);
                         break;
@@ -256,6 +249,7 @@ public class Client implements Runnable{
                         listarArquivos();
                         break;
                     case "4":
+                        System.out.print("Nome do arquivo: ");
                         nomeArquivo = leitor.readLine();
                         transferirArquivo(nomeArquivo);
                         break;
