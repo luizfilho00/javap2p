@@ -28,84 +28,100 @@ public class Server{
     }
 
     public void trataConexaoUDP() throws IOException, ClassNotFoundException {
-
         while (true) {
             DatagramPacket pacote = new DatagramPacket(buf, buf.length);
             try {
                 serverSocketUDP.receive(pacote);
+                ((Runnable) () ->{
+                    try {
+                        trataRequisicoes(pacote);
+                    } catch (IOException | ClassNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                }).run();
             } catch (IOException e) {
                 e.printStackTrace();
-            }
-            InetAddress address = pacote.getAddress();
-            int port = pacote.getPort();
-            pacote = new DatagramPacket(buf, buf.length, address, port);
-            ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
-            Mensagem msg = (Mensagem) entrada.readObject();
-            entrada.close();
-
-            switch (msg.getOperacao()){
-                case "listarUsuarios":
-                    gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t\t" + LocalDateTime.now() + "\n");
-                    listarUsuarios(pacote);
-                    break;
-                case "getListaArquivos":
-                    gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t" + LocalDateTime.now() + "\n");
-                    String[] listaArquivos = getListaArquivos();
-                    listarArquivos(listaArquivos, pacote);
-                    break;
-                case "buscarArquivo":
-                    gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t\t" + LocalDateTime.now() + "\n");
-                    String nomeArquivo = (String) msg.getParam("nomeArquivo");
-                    enviaResultadoBusca(pacote, nomeArquivo);
-                    break;
             }
         }
     }
 
     public void trataConexaoTCP() {
         while(true){
-            Runnable threadUpload = () -> {
-                try {
-                    Socket socketCliente = serverSocketTCP.accept();
-                    gravaLog.write(socketCliente.getInetAddress().getHostAddress()
-                            + "\t" + "transferirArquivo" + "\t\t\t" + LocalDateTime.now());
-                    OutputStream saidaBytes = socketCliente.getOutputStream();
-
-                    ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
-                    Mensagem msg = (Mensagem) entradaObjeto.readObject();
-
-                    File diretorio = new File("rca");
-                    if (!diretorio.exists()) {
-                        System.out.println("Diretorio excluido ou corrompido");
-                        return;
+            try {
+                Socket socketCliente = serverSocketTCP.accept();
+                ((Runnable) () -> {
+                    try {
+                        trataTransferencias(socketCliente);
+                    } catch (IOException | ClassNotFoundException e) {
+                        e.printStackTrace();
                     }
-                    String rcaPath = System.getProperty("user.dir") + "/rca/";
-
-                    File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
-                    FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
-                    BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
-                    long tempoInicio = System.nanoTime();
-                    long tamanhoArquivo = (long) msg.getParam("tamanhoArquivo");
-                    System.out.println("Enviando " + msg.getParam("nomeComExtensao")
-                            + " (" + tamanhoArquivo + " bytes) para "
-                            + socketCliente.getInetAddress().getHostAddress() + "...");
-                    int count;
-                    byte[] buffer = new byte[8192];
-                    while ((count = entradaBytes.read(buffer)) > 0){
-                        saidaBytes.write(buffer, 0, count);
-                    }
-                    saidaBytes.flush();
-                    long tempoFim = System.nanoTime();
-                    gravaLog.write(" tempo gasto: " + (tempoFim - tempoInicio)/1000000 + "ms\n");
-                    System.out.println("Enviado!");
-                    entradaBytes.close();
-                    saidaBytes.close();
-                    entradaObjeto.close();
-                }
-                catch (IOException | ClassNotFoundException ignored){}
-            };
-            threadUpload.run();
+                }).run();
+            }
+            catch (IOException ignored){}
         }
+    }
+
+    private void trataRequisicoes(DatagramPacket pacote) throws IOException, ClassNotFoundException {
+        InetAddress address = pacote.getAddress();
+        int port = pacote.getPort();
+        pacote = new DatagramPacket(buf, buf.length, address, port);
+        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
+        Mensagem msg = (Mensagem) entrada.readObject();
+        entrada.close();
+
+        switch (msg.getOperacao()){
+            case "listarUsuarios":
+                gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t\t" + LocalDateTime.now() + "\n");
+                listarUsuarios(pacote);
+                break;
+            case "getListaArquivos":
+                gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t" + LocalDateTime.now() + "\n");
+                String[] listaArquivos = getListaArquivos();
+                listarArquivos(listaArquivos, pacote);
+                break;
+            case "buscarArquivo":
+                gravaLog.write(pacote.getAddress().getHostAddress() + "\t" + msg.getOperacao() + "\t\t\t\t" + LocalDateTime.now() + "\n");
+                String nomeArquivo = (String) msg.getParam("nomeArquivo");
+                enviaResultadoBusca(pacote, nomeArquivo);
+                break;
+        }
+    }
+
+    private void trataTransferencias(Socket socketCliente) throws IOException, ClassNotFoundException {
+        gravaLog.write(socketCliente.getInetAddress().getHostAddress()
+                + "\t" + "transferirArquivo" + "\t\t\t" + LocalDateTime.now());
+        OutputStream saidaBytes = socketCliente.getOutputStream();
+
+        ObjectInputStream entradaObjeto = new ObjectInputStream(socketCliente.getInputStream());
+        Mensagem msg = (Mensagem) entradaObjeto.readObject();
+
+        File diretorio = new File("rca");
+        if (!diretorio.exists()) {
+            System.out.println("Diretorio excluido ou corrompido");
+            return;
+        }
+        String rcaPath = System.getProperty("user.dir") + "/rca/";
+
+        File arquivoParaEnvio = new File (rcaPath + msg.getParam("nomeComExtensao"));
+        FileInputStream entradaArquivo = new FileInputStream(arquivoParaEnvio);
+        BufferedInputStream entradaBytes = new BufferedInputStream(entradaArquivo);
+        long tempoInicio = System.nanoTime();
+        long tamanhoArquivo = (long) msg.getParam("tamanhoArquivo");
+        System.out.println("Enviando " + msg.getParam("nomeComExtensao")
+                + " (" + tamanhoArquivo + " bytes) para "
+                + socketCliente.getInetAddress().getHostAddress() + "...");
+        int count;
+        byte[] buffer = new byte[8192];
+        while ((count = entradaBytes.read(buffer)) > 0){
+            saidaBytes.write(buffer, 0, count);
+        }
+        saidaBytes.flush();
+        long tempoFim = System.nanoTime();
+        gravaLog.write(" tempo gasto: " + (tempoFim - tempoInicio)/1000000 + "ms\n");
+        System.out.println("Enviado!");
+        entradaBytes.close();
+        saidaBytes.close();
+        entradaObjeto.close();
     }
 
     private void listarUsuarios(DatagramPacket packet) throws IOException {
@@ -192,6 +208,5 @@ public class Server{
 
     public void fechaLog() throws IOException {
         gravaLog.close();
-        serverSocketTCP.close();
     }
 }

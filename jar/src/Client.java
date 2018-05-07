@@ -8,10 +8,24 @@ public class Client implements Runnable{
     private DatagramSocket datagramSocket;
     private Socket socketTCP;
     private int portaUDP, portaTCP;
+    private boolean fim = false;
+    private Mensagem transferenciaArquivo;
+    private List<Mensagem> listaTransferencias;
+    private Object mutexTransf;
 
-    Client(int portaUDP, int portaTCP)  {
+    Client(int portaUDP, int portaTCP, Object mutexTransf)  {
+        this.mutexTransf = mutexTransf;
+        this.listaTransferencias = new ArrayList<>();
         this.portaUDP = portaUDP;
         this.portaTCP = portaTCP;
+    }
+
+    public List<Mensagem> getListaTransferencias(){
+        return listaTransferencias;
+    }
+
+    public void removeTransferenciaDaLista(Mensagem msg){
+        listaTransferencias.remove(msg);
     }
 
     /**
@@ -48,16 +62,20 @@ public class Client implements Runnable{
      * @throws UnknownHostException;
      * @throws IOException;
      */
-    private void listarUsuarios() throws UnknownHostException, IOException {
+    public void listarUsuarios(List<String> listaDeClientes) throws UnknownHostException, IOException {
         Mensagem msg = new Mensagem("listarUsuarios");
         enviaPacoteBroadcast(msg);
         DatagramPacket pacoteResposta = criaPacote();
         System.out.println("Clientes conectados:");
-        datagramSocket.setSoTimeout(1000); //Timeout == 1 segundo == 1000millisegundos
+        datagramSocket.setSoTimeout(1000); //1 segundo
         while(true) {
             try {
                 datagramSocket.receive(pacoteResposta);
-                new TratamentoRequisicao(pacoteResposta, "listarUsuarios").run();
+                ((Runnable) () -> {
+                    synchronized (this) {
+                        listaDeClientes.add(pacoteResposta.getAddress().getHostAddress());
+                    }
+                }).run();
             }catch (IOException se){
                 break;
             }
@@ -76,7 +94,7 @@ public class Client implements Runnable{
         String arquivoNaPasta[] = file.list();
         if (arquivoNaPasta != null){
             for (String arq : arquivoNaPasta)
-                if (arq.contains(arquivoBuscado))
+                if (arq.equals(arquivoBuscado))
                     return true;
         }
         return false;
@@ -88,7 +106,7 @@ public class Client implements Runnable{
      * @return Mensagem contendo informações do arquivo e se este foi encontrado ou não
      * @throws IOException = Exceção caso operação IO ocorra falha
      */
-    private Mensagem buscarArquivo(String nomeArquivo) throws IOException {
+    public Mensagem buscarArquivo(String nomeArquivo, List<String> listaArquivosEncontrados) throws IOException {
         HashMap<String, String> clientesPossuemArquivo = new HashMap<>();
         final Object mutex = new Object();
         if (arquivoJaExiste(nomeArquivo)){
@@ -123,6 +141,11 @@ public class Client implements Runnable{
                                 arquivoDetalhado.setParam("nomeComExtensao",
                                         msgResposta.getParam("nomeComExtensao"));
                             }
+                            if (listaArquivosEncontrados != null) {
+                                listaArquivosEncontrados.add(cliente + "\t"
+                                        + (String) msgResposta.getParam("nomeComExtensao") + "\t"
+                                        + "tamanho: " + tamanho + " bytes");
+                            }
                             System.out.println(cliente + ", tamanho: " + tamanho);
                         }
                     }
@@ -141,17 +164,23 @@ public class Client implements Runnable{
      * Lista todos os arquivos encontrados na rede compartilhada
      * @throws IOException;
      */
-    private void listarArquivos() throws IOException {
+    public void listarArquivos(List<Mensagem> listaArquivos) throws IOException {
         Mensagem msg = new Mensagem("getListaArquivos");
         enviaPacoteBroadcast(msg);
 
         DatagramPacket pacoteResposta = criaPacote();
-        datagramSocket.setSoTimeout(2000);
+        datagramSocket.setSoTimeout(1000);
         System.out.println("Arquivos encontrados na rede:");
         while(true) {
             try {
                 datagramSocket.receive(pacoteResposta);
-                new TratamentoRequisicao(pacoteResposta, "getListaArquivos").run();
+                ((Runnable) () -> {
+                    try {
+                        listarTodosArquivos(listaArquivos, pacoteResposta);
+                    } catch (IOException | ClassNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                }).run();
             }catch (IOException se){
                 break;
             }
@@ -159,110 +188,108 @@ public class Client implements Runnable{
         datagramSocket.close();
     }
 
-
-    /**
-     * Faz download de um arquivo da rede de compartilhamento
-     * @param nomeArquivo = nome do arquivo a ser transferido
-     * ou houve falha na transferência
-     * @throws IOException;
-     */
-    private void transferirArquivo(String nomeArquivo) throws IOException {
-        Mensagem arquivoDetalhado = buscarArquivo(nomeArquivo);
-
-        File diretorio = new File("rca");
-        if (!diretorio.exists())
-            diretorio.mkdir();
-        String rcaPath = System.getProperty("user.dir") + "/rca/";
-
-        if (arquivoDetalhado == null) return;
-        if (!(boolean)arquivoDetalhado.getParam("arquivoEncontrado"))
-            return;
-
-        String ipCliente = (String) arquivoDetalhado.getParam("ipCliente");
-        final String nomeArquivoComExtensao = (String) arquivoDetalhado.getParam("nomeComExtensao");
-        final long tamanhoDoArquivo = (long) arquivoDetalhado.getParam("tamanhoArquivo");
-        socketTCP = new Socket(ipCliente, portaTCP);
-        Runnable threadDownload = () -> {
-            try {
-                transferirArquivo(nomeArquivoComExtensao, tamanhoDoArquivo, rcaPath);
-            } catch (IOException ignored) {}
-        };
-        threadDownload.run();
-    }
-
-    /**
-     * Método privado que trata da conexão com a rede para transferir o arquivo solicitado
-     * @param arquivoComExtensao = Nome do arquivo com sua extensão
-     * @param rcaPath = Caminho da pasta compartilhada entre os programas da rede
-     * @throws IOException;
-     */
-    private void transferirArquivo(String arquivoComExtensao, long tamanhoDoArquivo, String rcaPath) throws IOException {
-        ObjectOutputStream saidaObjeto = new ObjectOutputStream(socketTCP.getOutputStream());
-        Mensagem msg = new Mensagem("transferirArquivo");
-        msg.setParam("nomeComExtensao", arquivoComExtensao);
-        msg.setParam("tamanhoArquivo", tamanhoDoArquivo);
-        saidaObjeto.writeObject(msg);
-        saidaObjeto.flush();
-
-        FileOutputStream writeFile = new FileOutputStream(rcaPath + arquivoComExtensao);
-        BufferedOutputStream writeBuffer = new BufferedOutputStream(writeFile);
-        InputStream entradaBytes = socketTCP.getInputStream();
-        byte[] buffer = new byte[8192];
-        int count;
-        while ((count = entradaBytes.read(buffer)) > 0){
-            writeBuffer.write(buffer, 0, count);
+    private void listarTodosArquivos(List<Mensagem> list, DatagramPacket pacote)
+            throws IOException, ClassNotFoundException {
+        ObjectInputStream entrada = new ObjectInputStream(new ByteArrayInputStream(pacote.getData()));
+        String[] listaDeArquivos = (String[]) entrada.readObject();
+        for (String arquivo : listaDeArquivos) {
+            String cliente = pacote.getAddress().getHostAddress();
+            System.out.println(cliente + " " + arquivo);
+            Mensagem msg = new Mensagem("");
+            msg.setParam("ip", cliente);
+            msg.setParam("nomeArquivo", arquivo);
+            list.add(msg);
         }
-        writeBuffer.flush();
-        writeBuffer.close();
-        writeFile.close();
-        saidaObjeto.close();
     }
 
-    /**
-     * Executa thread invocando o método correspondente à requisição desejada
-     */
-    @Override
-    public void run() {
-        try {
-            String comando = "";
-            while(!comando.equals("0")){
-                System.out.println("######### Funcoes #########");
-                System.out.println("1 - Listar usuarios conectados na rede");
-                System.out.println("2 - Buscar arquivo pelo nome");
-                System.out.println("3 - Listar todos os arquivos da RCA");
-                System.out.println("4 - Transferir arquivo");
-                System.out.println("0 - Sair");
-                BufferedReader leitor = new BufferedReader(new InputStreamReader(System.in));
-                System.out.print("Opcao: ");
-                comando = leitor.readLine();
-                String nomeArquivo;
-                switch(comando){
-                    case "1":
-                        listarUsuarios();
-                        break;
-                    case "2":
-                        System.out.print("Nome do arquivo: ");
-                        nomeArquivo = leitor.readLine();
-                        buscarArquivo(nomeArquivo);
-                        break;
-                    case "3":
-                        listarArquivos();
-                        break;
-                    case "4":
-                        System.out.print("Nome do arquivo: ");
-                        nomeArquivo = leitor.readLine();
-                        transferirArquivo(nomeArquivo);
-                        break;
-                    case "0":
-                        if (socketTCP != null)
-                            socketTCP.close();
-                        return;
-                    default:
-                        break;
-                }
+        /**
+         * Faz download de um arquivo da rede de compartilhamento
+         * @param nomeArquivo = nome do arquivo a ser transferido
+         * ou houve falha na transferência
+         * @throws IOException;
+         */
+        public void transferirArquivo(String nomeArquivo) throws IOException {
+            Mensagem arquivoDetalhado = buscarArquivo(nomeArquivo, null);
+
+            File diretorio = new File("rca");
+            if (!diretorio.exists())
+                diretorio.mkdir();
+            String rcaPath = System.getProperty("user.dir") + "/rca/";
+
+            if (arquivoDetalhado == null) return;
+            if (!(boolean)arquivoDetalhado.getParam("arquivoEncontrado"))
+                return;
+
+            String ipCliente = (String) arquivoDetalhado.getParam("ipCliente");
+            final String nomeArquivoComExtensao = (String) arquivoDetalhado.getParam("nomeComExtensao");
+            final long tamanhoDoArquivo = (long) arquivoDetalhado.getParam("tamanhoArquivo");
+            socketTCP = new Socket(ipCliente, portaTCP);
+            transferenciaArquivo = new Mensagem("");
+            transferenciaArquivo.setParam("ip", ipCliente);
+            transferenciaArquivo.setParam("nomeArquivo", nomeArquivoComExtensao);
+            transferenciaArquivo.setParam("concluido", false);
+            listaTransferencias.add(transferenciaArquivo);
+            Runnable threadDownload = () -> {
+                try {
+                    transferirArquivo(nomeArquivoComExtensao, tamanhoDoArquivo, rcaPath, transferenciaArquivo);
+                } catch (IOException ignored) {}
+            };
+            threadDownload.run();
+        }
+
+        /**
+         * Método privado que trata da conexão com a rede para transferir o arquivo solicitado
+         * @param arquivoComExtensao = Nome do arquivo com sua extensão
+         * @param rcaPath = Caminho da pasta compartilhada entre os programas da rede
+         * @throws IOException;
+         */
+        private void transferirArquivo(String arquivoComExtensao, long tamanhoDoArquivo, String rcaPath,
+                Mensagem transferenciaArquivo) throws IOException {
+            ObjectOutputStream saidaObjeto = new ObjectOutputStream(socketTCP.getOutputStream());
+            Mensagem msg = new Mensagem("transferirArquivo");
+            msg.setParam("nomeComExtensao", arquivoComExtensao);
+            msg.setParam("tamanhoArquivo", tamanhoDoArquivo);
+            saidaObjeto.writeObject(msg);
+            saidaObjeto.flush();
+
+            FileOutputStream writeFile = new FileOutputStream(rcaPath + arquivoComExtensao);
+            BufferedOutputStream writeBuffer = new BufferedOutputStream(writeFile);
+            InputStream entradaBytes = socketTCP.getInputStream();
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = entradaBytes.read(buffer)) > 0){
+                writeBuffer.write(buffer, 0, count);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+            writeBuffer.flush();
+            writeBuffer.close();
+            writeFile.close();
+            saidaObjeto.close();
+            synchronized (mutexTransf){
+                transferenciaArquivo.setParam("concluido", true);
+                mutexTransf.notify();
+            }
+        }
+
+        public void finalizaCliente() throws IOException {
+            if (socketTCP != null)
+                socketTCP.close();
+            if (datagramSocket != null)
+                datagramSocket.close();
+            fim = true;
+        }
+
+        @Override
+        public void run() {
+            try {
+                synchronized (this) {
+                    while(true) {
+                        this.wait();
+                        break;
+                    }
+                }
+                if (fim) return;
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
-}

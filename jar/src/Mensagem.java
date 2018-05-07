@@ -5,7 +5,6 @@ import java.util.Map;
 public class Mensagem implements Serializable{
 	
 	private String operacao;
-	private Status status;
 	private Map<String, Object> params;
 	
 	public Mensagem(String operacao){
@@ -15,14 +14,6 @@ public class Mensagem implements Serializable{
 	
 	public String getOperacao() {
 		return operacao;
-	}
-	
-	public Status getStatus() {
-		return status;
-	}
-	
-	public void setStatus(Status s) {
-		this.status = s;
 	}
 	
 	public Object getParam(String chave) {
@@ -36,7 +27,6 @@ public class Mensagem implements Serializable{
 	@Override
 	public String toString() {
 		String m = "Operacao " + operacao;
-		m += "\nStatus: " + status;
 		m += "\nParametros:";
 		
 		for(String chave : params.keySet()) {
